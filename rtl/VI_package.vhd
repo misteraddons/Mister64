@@ -5,27 +5,31 @@ use IEEE.numeric_std.all;
 package pVI is
 
    type tvideoout_settings is record
-      CTRL_TYPE       : unsigned(1 downto 0);
-      CTRL_SERRATE    : std_logic;
-      X_SCALE_FACTOR  : unsigned(11 downto 0);
-      VI_WIDTH        : unsigned(11 downto 0);
-      isPAL           : std_logic;
-      videoSizeY      : unsigned(9 downto 0);
-      cropBottom      : unsigned(1 downto 0);
-      H_VIDEO_START   : unsigned(9 downto 0);
+      CTRL_TYPE         : unsigned(1 downto 0);
+      CTRL_SERRATE      : std_logic;
+      isPAL             : std_logic;
+      fixedBlanks       : std_logic;
+      CROPVERTICAL      : unsigned(1 downto 0);
+      videoSizeY        : unsigned(9 downto 0);
+      VI_V_SYNC         : unsigned(9 downto 0);
+      VI_H_SYNC_LENGTH  : unsigned(11 downto 0);
+      VI_H_VIDEO_START  : unsigned(9 downto 0);
+      VI_H_VIDEO_END    : unsigned(9 downto 0);
+      VI_V_VIDEO_START  : unsigned(9 downto 0);
+      VI_V_VIDEO_END    : unsigned(9 downto 0);
+      VI_HSYNC_WIDTH    : unsigned(7 downto 0);
+      VI_VSYNC_WIDTH    : unsigned(3 downto 0);
    end record;
    
    type tvideoout_reports is record
-      vsync                   : std_logic;
-      inVsync                 : std_logic;
       interlacedDisplayField  : std_logic;
       newLine                 : std_logic;
-      newFrame                : std_logic;
       VI_CURRENT              : unsigned(8 downto 0);
    end record;
    
    type tvideoout_request is record
       fetch                   : std_logic;
+      newFrame                : std_logic;
       lineInNext              : unsigned(8 downto 0);
       xpos                    : integer range 0 to 1023;
       lineDisp                : unsigned(8 downto 0);

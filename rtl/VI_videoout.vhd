@@ -22,7 +22,8 @@ entity VI_videoout is
       error_vi                         : out std_logic;
                   
       ISPAL                            : in  std_logic;
-      CROPBOTTOM                       : in  unsigned(1 downto 0);
+      FIXEDBLANKS                      : in  std_logic;
+      CROPVERTICAL                     : in  unsigned(1 downto 0);
       VI_BILINEAROFF                   : in  std_logic;
       VI_GAMMAOFF                      : in  std_logic;
       VI_NOISEOFF                      : in  std_logic;
@@ -36,24 +37,29 @@ entity VI_videoout is
       fpscountOn                       : in  std_logic;
       fpscountBCD                      : in  unsigned(7 downto 0);  
                   
-      VI_CTRL_TYPE                     : in unsigned(1 downto 0);
-      VI_CTRL_AA_MODE                  : in unsigned(1 downto 0);
-      VI_CTRL_SERRATE                  : in std_logic;
-      VI_CTRL_GAMMA_ENABLE             : in std_logic;
-      VI_CTRL_GAMMA_DITHER_ENABLE      : in std_logic;
-      VI_CTRL_DIVOT_ENABLE             : in std_logic;
-      VI_CTRL_DEDITHER_FILTER_ENABLE   : in std_logic;
-      VI_ORIGIN                        : in unsigned(23 downto 0);
-      VI_WIDTH                         : in unsigned(11 downto 0);
-      VI_X_SCALE_FACTOR                : in unsigned(11 downto 0);
-      VI_X_SCALE_OFFSET                : in unsigned(11 downto 0);
-      VI_Y_SCALE_FACTOR                : in unsigned(11 downto 0);
-      VI_Y_SCALE_OFFSET                : in unsigned(11 downto 0);
-      VI_V_VIDEO_START                 : in unsigned(9 downto 0);
-      VI_V_VIDEO_END                   : in unsigned(9 downto 0);
-      VI_H_VIDEO_START                 : in unsigned(9 downto 0);
-      VI_H_VIDEO_END                   : in unsigned(9 downto 0);
-                  
+      VI_CTRL_TYPE                     : in  unsigned(1 downto 0);
+      VI_CTRL_AA_MODE                  : in  unsigned(1 downto 0);
+      VI_CTRL_SERRATE                  : in  std_logic;
+      VI_CTRL_GAMMA_ENABLE             : in  std_logic;
+      VI_CTRL_GAMMA_DITHER_ENABLE      : in  std_logic;
+      VI_CTRL_DIVOT_ENABLE             : in  std_logic;
+      VI_CTRL_DEDITHER_FILTER_ENABLE   : in  std_logic;
+      VI_ORIGIN                        : in  unsigned(23 downto 0);
+      VI_WIDTH                         : in  unsigned(11 downto 0);
+      VI_X_SCALE_FACTOR                : in  unsigned(11 downto 0);
+      VI_X_SCALE_OFFSET                : in  unsigned(11 downto 0);
+      VI_Y_SCALE_FACTOR                : in  unsigned(11 downto 0);
+      VI_Y_SCALE_OFFSET                : in  unsigned(11 downto 0);
+      VI_V_SYNC                        : in  unsigned(9 downto 0);
+      VI_H_SYNC_LENGTH                 : in  unsigned(11 downto 0);
+      VI_H_VIDEO_START                 : in  unsigned(9 downto 0);
+      VI_H_VIDEO_END                   : in  unsigned(9 downto 0);
+      VI_V_VIDEO_START                 : in  unsigned(9 downto 0);
+      VI_V_VIDEO_END                   : in  unsigned(9 downto 0);
+      VI_HSYNC_WIDTH                   : in  unsigned(7 downto 0);
+      VI_VSYNC_WIDTH                   : in  unsigned(3 downto 0);
+          
+      newFrame                         : out std_logic;
       newLine                          : out std_logic;
       VI_CURRENT                       : out unsigned(9 downto 0);
                   
@@ -179,6 +185,8 @@ architecture arch of VI_videoout is
    signal videoout_readAddr   : unsigned(10 downto 0);
 
    -- overlay
+   signal overlay_ypos        : unsigned(8 downto 0);
+   
    signal overlay_data        : std_logic_vector(23 downto 0);
    signal overlay_ena         : std_logic;
    
@@ -206,13 +214,20 @@ begin
 
    videoout_settings.CTRL_TYPE         <= VI_CTRL_TYPE;
    videoout_settings.CTRL_SERRATE      <= VI_CTRL_SERRATE;
-   videoout_settings.X_SCALE_FACTOR    <= VI_X_SCALE_FACTOR;
-   videoout_settings.VI_WIDTH          <= VI_WIDTH;
    videoout_settings.isPAL             <= ISPAL;
-   videoout_settings.videoSizeY        <= VI_V_VIDEO_END - VI_V_VIDEO_START - to_integer(videoout_settings.cropBottom & "0000");
-   videoout_settings.cropBottom        <= CROPBOTTOM;
-   videoout_settings.H_VIDEO_START     <= VI_H_VIDEO_START;
+   videoout_settings.fixedBlanks       <= FIXEDBLANKS;
+   videoout_settings.CROPVERTICAL      <= CROPVERTICAL;
+   videoout_settings.videoSizeY        <= VI_V_VIDEO_END - VI_V_VIDEO_START - to_integer(CROPVERTICAL & "0000");
+   videoout_settings.VI_V_SYNC         <= VI_V_SYNC;
+   videoout_settings.VI_H_SYNC_LENGTH  <= VI_H_SYNC_LENGTH;
+   videoout_settings.VI_H_VIDEO_START  <= VI_H_VIDEO_START;
+   videoout_settings.VI_H_VIDEO_END    <= VI_H_VIDEO_END;
+   videoout_settings.VI_V_VIDEO_START  <= VI_V_VIDEO_START;
+   videoout_settings.VI_V_VIDEO_END    <= VI_V_VIDEO_END;
+   videoout_settings.VI_HSYNC_WIDTH    <= VI_HSYNC_WIDTH;
+   videoout_settings.VI_VSYNC_WIDTH    <= VI_VSYNC_WIDTH;
    
+   newFrame   <= videoout_request.newFrame;
    newLine    <= videoout_reports.newLine;
    VI_CURRENT <= videoout_reports.VI_CURRENT & videoout_reports.interlacedDisplayField; -- todo: need to find when interlace sets bit 0, can't be instant, otherwise Kroms CPU tests would hang in infinite loop  
    
@@ -233,8 +248,7 @@ begin
       VI_Y_SCALE_FACTOR  => VI_Y_SCALE_FACTOR,
       VI_Y_SCALE_OFFSET  => VI_Y_SCALE_OFFSET,
                         
-      newFrame           => videoout_reports.newFrame,
-      lineNr             => videoout_request.lineInNext,
+      newFrame           => videoout_request.newFrame,
       fetch              => videoout_request.fetch,
       
       addr9_offset       => addr9_offset,
@@ -351,7 +365,7 @@ begin
       VI_CTRL_AA_MODE    => VI_CTRL_AA_MODE,  
       VI_WIDTH           => VI_WIDTH,      
                          
-      newFrame           => videoout_reports.newFrame,          
+      newFrame           => videoout_request.newFrame,          
       startProc          => startProc,     
       procDone           => procDone,     
                          
@@ -443,7 +457,7 @@ begin
       VI_X_SCALE_FACTOR             => VI_X_SCALE_FACTOR,
       VI_X_SCALE_OFFSET             => VI_X_SCALE_OFFSET,
                                     
-      newFrame                      => videoout_reports.newFrame,             
+      newFrame                      => videoout_request.newFrame,             
       startOut                      => startOut,        
       fracYout                      => fracYout,        
       outprocIdle                   => outprocIdle,        
@@ -474,7 +488,7 @@ begin
       data_a      => outram_di_A,
       wren_a      => out_pixel,
       
-      clock_b     => clk1x,
+      clock_b     => clkvid,
       address_b   => outram_addr_B,
       data_b      => 24x"0",
       wren_b      => '0',
@@ -483,7 +497,34 @@ begin
    
    outram_addr_B <= std_logic_vector(videoout_readAddr);
 
-   ivi_videoout_sync : entity work.vi_videoout_sync
+   --ivi_videoout_sync : entity work.vi_videoout_sync
+   --generic map
+   --(
+   --   VITEST           => VITEST
+   --)
+   --port map
+   --(
+   --   clk1x                   => clk1x,
+   --   ce                      => ce,   
+   --   reset                   => reset_1x,
+   --            
+   --   videoout_settings       => videoout_settings,
+   --   videoout_reports        => videoout_reports,                 
+   --                                                                   
+   --   videoout_request        => videoout_request, 
+   --   videoout_readAddr       => videoout_readAddr,  
+   --   videoout_pixelRead      => outram_do_B,   
+   --
+   --   overlay_data            => overlay_data,
+   --   overlay_ena             => overlay_ena,                     
+   --                
+   --   videoout_out            => videoout_out,
+   --
+   --   SS_VI_CURRENT           => SS_VI_CURRENT,
+   --   SS_nextHCount           => SS_nextHCount
+   --);  
+   
+   ivi_videoout_async : entity work.vi_videoout_async
    generic map
    (
       VITEST           => VITEST
@@ -491,21 +532,22 @@ begin
    port map
    (
       clk1x                   => clk1x,
-      ce                      => ce,   
-      reset                   => reset_1x,
+      clkvid                  => clkvid,
+      ce_1x                   => ce,   
+      reset_1x                => reset_1x,
                
-      videoout_settings       => videoout_settings,
-      videoout_reports        => videoout_reports,                 
-                                                                      
-      videoout_request        => videoout_request, 
+      videoout_settings_1x    => videoout_settings,
+      videoout_reports_1x     => videoout_reports,                                                                    
+      videoout_request_1x     => videoout_request, 
       videoout_readAddr       => videoout_readAddr,  
       videoout_pixelRead      => outram_do_B,   
    
+      overlay_ypos            => overlay_ypos,
       overlay_data            => overlay_data,
       overlay_ena             => overlay_ena,                     
                    
       videoout_out            => videoout_out,
-
+   
       SS_VI_CURRENT           => SS_VI_CURRENT,
       SS_nextHCount           => SS_nextHCount
    );  
@@ -517,11 +559,11 @@ begin
    ioverlayFPS : entity work.VI_overlay generic map (2, 4, 4, x"0000FF")
    port map
    (
-      clk                    => clk1x,
+      clk                    => clkvid,
       ce                     => videoout_out.ce,
       ena                    => fpscountOn,                    
-      i_pixel_out_x          => videoout_request.xpos,
-      i_pixel_out_y          => to_integer(videoout_request.lineDisp),
+      i_pixel_out_x          => to_integer(videoout_readAddr(9 downto 0)),
+      i_pixel_out_y          => to_integer(overlay_ypos),
       o_pixel_out_data       => overlay_fps_data,
       o_pixel_out_ena        => overlay_fps_ena,
       textstring             => fpstext
@@ -537,11 +579,11 @@ begin
    ioverlayError : entity work.VI_overlay generic map (8, 4, 44, x"0000FF")
    port map
    (
-      clk                    => clk1x,
+      clk                    => clkvid,
       ce                     => videoout_out.ce,
       ena                    => errorEna,                    
-      i_pixel_out_x          => videoout_request.xpos,
-      i_pixel_out_y          => to_integer(videoout_request.lineDisp),
+      i_pixel_out_x          => to_integer(videoout_readAddr(9 downto 0)),
+      i_pixel_out_y          => to_integer(overlay_ypos),
       o_pixel_out_data       => overlay_error_data,
       o_pixel_out_ena        => overlay_error_ena,
       textstring             => x"45" & errortext

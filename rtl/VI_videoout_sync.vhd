@@ -21,7 +21,7 @@ entity vi_videoout_sync is
       videoout_settings       : in  tvideoout_settings;
       videoout_reports        : out tvideoout_reports;
 
-      videoout_request        : out tvideoout_request := ('0', (others => '0'), 0, (others => '0'));
+      videoout_request        : out tvideoout_request := ('0', '0', (others => '0'), 0, (others => '0'));
       
       videoout_readAddr       : out unsigned(10 downto 0) := (others => '0');
       videoout_pixelRead      : in  std_logic_vector(23 downto 0);
@@ -74,19 +74,19 @@ begin
    videoout_reports.VI_CURRENT <= to_unsigned(vpos, 9);
 
    process (clk1x)
-      variable isVsync                   : std_logic;
+      variable isVblank                  : std_logic;
       variable vposNew                   : integer range 0 to 511;
       variable interlacedDisplayFieldNew : std_logic;
-      variable vsync_hstart : integer range 0 to 4095;
+      variable vsync_hstart              : integer range 0 to 4095;
    begin
       if rising_edge(clk1x) then
              
          videoout_reports.newLine  <= '0';
-         videoout_reports.newFrame <= '0';
+         videoout_request.newFrame <= '0';
          
          lineInNew <= '0';
              
-         videoout_reports.vsync    <= '0';
+         videoout_out.vsync    <= '0';
 
          if (to_integer(videoout_settings.videoSizeY(9 downto 1)) = 0) then
             vsync_adj_pal <= 10;
@@ -97,54 +97,41 @@ begin
          end if;
          
          if (videoout_settings.isPAL = '1') then
-            if (vsyncCount >= vsync_adj_pal and vsyncCount < (vsync_adj_pal + 3)) then videoout_reports.vsync <= '1'; end if;
+            if (vsyncCount >= vsync_adj_pal and vsyncCount < (vsync_adj_pal + 3)) then videoout_out.vsync <= '1'; end if;
          else
-            if (vsyncCount >= vsync_adj_ntsc and vsyncCount < (vsync_adj_ntsc + 3)) then videoout_reports.vsync <= '1'; end if;
+            if (vsyncCount >= vsync_adj_ntsc and vsyncCount < (vsync_adj_ntsc + 3)) then videoout_out.vsync <= '1'; end if;
          end if;
 
          if (reset = '1') then
-               
 
-            --videoout_reports.irq_VBLANK  <= '0';
-               
-            --videoout_reports.interlacedDisplayField   <= videoout_ss_in.interlacedDisplayField;
+            videoout_reports.interlacedDisplayField     <= '0';
             nextHCount                                  <= to_integer(SS_nextHCount(11 downto 0));
             if (VITEST = '1') then
-               vpos                                     <= 0;
+               vpos                                     <= 248;
             else
                vpos                                     <= to_integer(SS_VI_CURRENT(9 downto 1));
             end if;
-            --videoout_reports.inVsync                  <= videoout_ss_in.inVsync;
-            --videoout_reports.activeLineLSB            <= videoout_ss_in.activeLineLSB;
-            --videoout_reports.GPUSTAT_InterlaceField   <= videoout_ss_in.GPUSTAT_InterlaceField;
-            --videoout_reports.GPUSTAT_DrawingOddline   <= videoout_ss_in.GPUSTAT_DrawingOddline;
                   
          elsif (ce = '1') then
          
             --gpu timing calc
             if (videoout_settings.isPAL = '1') then
-               --htotal <= (62500000 / 50 / 312); -- overwritten below
                htotal <= 4010;
-	       if  (videoout_settings.CTRL_SERRATE ='1' and videoout_reports.interlacedDisplayField='1') then
-	       		vtotal <= 313;
-       	       else
-	       		vtotal <= 312;
-		end if;
-               --videoout_out.isPal <= '1';
+               if  (videoout_settings.CTRL_SERRATE = '1' and videoout_reports.interlacedDisplayField = '1') then
+                  vtotal <= 313;
+               else
+                  vtotal <= 312;
+               end if;
+
             else
-               --htotal <= (62500000 / 60 / 262); -- overwritten below
                htotal <= 3970;
-	       if  (videoout_settings.CTRL_SERRATE ='1' and videoout_reports.interlacedDisplayField='1') then
-               vtotal <= 263;
-       	       else
-               vtotal <= 262;
-       	       end if;
-               --videoout_out.isPal <= '0';
+               if  (videoout_settings.CTRL_SERRATE = '1' and videoout_reports.interlacedDisplayField = '1') then
+                  vtotal <= 263;
+               else
+                  vtotal <= 262;
+               end if;
             end if;
-            
-            --if (videoout_settings.vDisplayRange( 9 downto  0) < 314) then vDisplayStart <= to_integer(videoout_settings.vDisplayRange( 9 downto  0)); else vDisplayStart <= 314; end if;
-            --if (videoout_settings.vDisplayRange(19 downto 10) < 314) then vDisplayEnd   <= to_integer(videoout_settings.vDisplayRange(19 downto 10)); else vDisplayEnd   <= 314; end if;
-              
+
             vDisplayStart <= 10;
             if ((10 + to_integer(videoout_settings.videoSizeY(9 downto 1))) = 10) then
                vDisplayEnd <= 247;
@@ -152,59 +139,64 @@ begin
                vDisplayEnd <= 10 + to_integer(videoout_settings.videoSizeY(9 downto 1));
             end if;
 
-	    vsync_hstart:=1;
-
-	    if  (videoout_settings.CTRL_SERRATE ='1') then
-		    if (videoout_reports.interlacedDisplayField='0') then
-		    	vsync_hstart:=htotal/2;
-	    	    end if;
-	    end if;
-	    if (nextHCount=vsync_hstart) then
-		    isVsync:='0';
-        	    vsyncCount<=0;
-		    if (vpos<vDisplayStart or vpos>=vDisplayEnd) then
-		       	isVsync:='1';
-		       	vsyncCount<= vsyncCount + 1;
-		    end if;
-	    end if;
+            vsync_hstart := 1;
+            if  (videoout_settings.CTRL_SERRATE = '1') then
+               if (videoout_reports.interlacedDisplayField = '0') then
+                  vsync_hstart := htotal / 2;
+               end if;
+            end if;
+            
+            isVblank := videoout_out.vblank;
+            if (nextHCount = vsync_hstart) then
+               vsyncCount <= 0;
+               if (vpos < vDisplayStart or vpos >= vDisplayEnd) then
+                  isVblank := '1';
+                  vsyncCount <= vsyncCount + 1;
+               else
+                  isVblank := '0';
+               end if;
+            end if;
+            videoout_out.vblank <= isVblank;
+            
+            interlacedDisplayFieldNew := videoout_reports.interlacedDisplayField;
+            if (isVblank /= videoout_out.vblank) then
+               if (isVblank = '1') then
+                  videoout_request.fetch      <= '0';
+                  if (videoout_settings.CTRL_SERRATE = '1') then 
+                     interlacedDisplayFieldNew := not videoout_reports.interlacedDisplayField;
+                  else 
+                     interlacedDisplayFieldNew := '0';
+                  end if;
+               end if;
+            end if;
+            videoout_out.vblank <= isVblank;
+            videoout_reports.interlacedDisplayField <= interlacedDisplayFieldNew;
+            
             -- gpu timing count
             if (nextHCount > 1) then
                nextHCount <= nextHCount - 1;
                if (nextHCount = 3) then 
                   videoout_reports.newLine <= '1';
                   if (vpos = vDisplayStart - 3) then
-                    videoout_reports.newFrame <= '1'; 
+                     videoout_request.newFrame <= '1'; 
                   end if;
                end if;
 
-	else
+            else
 
-	       nextHCount <= htotal;
+               nextHCount <= htotal;
                vposNew := vpos + 1;
                if (vposNew >= vtotal) then
                   vposNew := 0;
                end if;
                
                vpos <= vposNew;
-               	       
+                         
                if (vposNew >= vDisplayStart and vposNew < vDisplayEnd) then 
                   lineIn    <= to_unsigned(vposNew - vDisplayStart, 9);
                   lineInNew <= '1';
                end if;
-               interlacedDisplayFieldNew := videoout_reports.interlacedDisplayField;
-               if (isVsync /= videoout_reports.inVsync) then
-                  if (isVsync = '1') then
-                     videoout_request.fetch      <= '0';
-                     if (videoout_settings.CTRL_SERRATE = '1') then 
-                        interlacedDisplayFieldNew := not videoout_reports.interlacedDisplayField;
-                     else 
-                        interlacedDisplayFieldNew := '0';
-                     end if;
-                  end if;
-                  videoout_reports.inVsync <= isVsync;
-               end if;
-               videoout_reports.interlacedDisplayField <= interlacedDisplayFieldNew;
-               
+
                vposNew := vposNew + 1;
                if (vposNew >= vDisplayStart and vposNew < vDisplayEnd - 1) then 
                   videoout_request.lineInNext <= to_unsigned(vposNew - vDisplayStart, 9);
@@ -214,37 +206,19 @@ begin
                end if;
               
             end if;
-            
-            --if (softReset = '1') then
-            --   videoout_reports.GPUSTAT_InterlaceField <= '1';
-            --   videoout_reports.GPUSTAT_DrawingOddline <= '0';
-            --   videoout_reports.irq_VBLANK             <= '0';
-            --   
-            --   vpos                      <= 0;
-            --   nextHCount                <= htotal;
-            --   videoout_reports.inVsync  <= '0';
-            --end if;
 
          end if;
       end if;
    end process;
    
    -- timing generation reading
-   videoout_out.vsync          <= videoout_reports.vsync; 
-   videoout_out.vblank         <= videoout_reports.inVsync;
    videoout_out.interlace      <= videoout_reports.interlacedDisplayField;
    
-   --videoout_out.DisplayOffsetX <= videoout_settings.vramRange(9 downto 0);
-   --videoout_out.DisplayOffsetY <= videoout_settings.vramRange(18 downto 10);
-   --
-   --videoout_out.DisplayWidthReal  <= videoout_out.DisplayWidth; 
-   --videoout_out.DisplayHeightReal <= videoout_out.DisplayHeight;
-   
    clkDiv <= 5;
-   xmax <= 640;
+   xmax   <= 640;
    
-   xstart <= (to_integer(videoout_settings.H_VIDEO_START) - 128) when (videoout_settings.isPAL = '1' and videoout_settings.H_VIDEO_START >= 128) else
-             (to_integer(videoout_settings.H_VIDEO_START) - 108) when (videoout_settings.isPAL = '0' and videoout_settings.H_VIDEO_START >= 108) else
+   xstart <= (to_integer(videoout_settings.VI_H_VIDEO_START) - 128) when (videoout_settings.isPAL = '1' and videoout_settings.VI_H_VIDEO_START >= 128) else
+             (to_integer(videoout_settings.VI_H_VIDEO_START) - 108) when (videoout_settings.isPAL = '0' and videoout_settings.VI_H_VIDEO_START >= 108) else
              0;
    
    process (clk1x)

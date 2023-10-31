@@ -110,7 +110,8 @@ begin
       fpscountOn            => '1',
       
       ISPAL                 => '0',
-      CROPBOTTOM            => "00",
+      FIXEDBLANKS           => '0',
+      CROPVERTICAL          => "00",
       VI_BILINEAROFF        => '0',
       VI_GAMMAOFF           => '0',
       VI_NOISEOFF           => '1',

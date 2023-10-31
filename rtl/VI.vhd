@@ -25,7 +25,8 @@ entity VI is
       second_ena       : out std_logic := '0';
       
       ISPAL            : in  std_logic;
-      CROPBOTTOM       : in  unsigned(1 downto 0);
+      FIXEDBLANKS      : in  std_logic;
+      CROPVERTICAL     : in  unsigned(1 downto 0);
       VI_BILINEAROFF   : in  std_logic;
       VI_GAMMAOFF      : in  std_logic;
       VI_NOISEOFF      : in  std_logic;
@@ -101,12 +102,12 @@ architecture arch of VI is
    signal VI_WIDTH                        : unsigned(11 downto 0) := (others => '0');  -- 0x04400008 (RW): [11:0] frame buffer line width in pixels 
    signal VI_INTR                         : unsigned( 9 downto 0) := (others => '0');  -- 0x0440000C (RW): [9:0] interrupt when current half-line = V_INTR
    signal VI_CURRENT                      : unsigned( 9 downto 0) := (others => '0');  -- 0x04400010 (RW): [9:0] current half line, sampled once per line (the lsb of V_CURRENT is constant within a field, and in interlaced modes gives the field number - which is constant for non - interlaced modes)  - Writes clears interrupt line
-   signal VI_BURST_HWIDTH                 : unsigned( 7 downto 0) := (others => '0');  -- 0x04400014 (RW): [7:0] horizontal sync width in pixels
+   signal VI_HSYNC_WIDTH                  : unsigned( 7 downto 0) := (others => '0');  -- 0x04400014 (RW): [7:0] horizontal sync width in pixels
    signal VI_BURST_BURSTWIDTH             : unsigned( 7 downto 0) := (others => '0');  -- 0x04400014 (RW): [15:8] color burst width in pixels
-   signal VI_BURST_VWIDTH                 : unsigned( 3 downto 0) := (others => '0');  -- 0x04400014 (RW): [19:16] vertical sync width in half lines 
+   signal VI_VSYNC_WIDTH                  : unsigned( 3 downto 0) := (others => '0');  -- 0x04400014 (RW): [19:16] vertical sync width in half lines 
    signal VI_BURST_START                  : unsigned( 9 downto 0) := (others => '0');  -- 0x04400014 (RW): [29:20] start of color burst in pixels from h - sync
    signal VI_V_SYNC                       : unsigned( 9 downto 0) := (others => '0');  -- 0x04400018 (RW): [9:0] number of half-lines per field
-   signal VI_H_SYNC_WIDTH                 : unsigned(11 downto 0) := (others => '0');  -- 0x0440001C (RW): [11:0] total duration of a line in 1/4 pixel
+   signal VI_H_SYNC_LENGTH                : unsigned(11 downto 0) := (others => '0');  -- 0x0440001C (RW): [11:0] total duration of a line in 1/4 pixel
    signal VI_H_SYNC_LEAP                  : unsigned( 4 downto 0) := (others => '0');  -- 0x0440001C (RW): [20:16] a 5 - bit leap pattern used for PAL only(h_sync_period)
    signal VI_LEAP_A                       : unsigned(11 downto 0) := (others => '0');  -- 0x04400020 (RW): [11:0] identical to h_sync_period
    signal VI_LEAP_B                       : unsigned(11 downto 0) := (others => '0');  -- 0x04400020 (RW): [27:16] identical to h_sync_period
@@ -123,6 +124,7 @@ architecture arch of VI is
    signal VI_TEST_ADDR                    : unsigned( 6 downto 0) := (others => '0');  -- 0x04400038 (RW): [6:0] TEST_ADDR<6:0>: Diagnostics only, usage unknown 
    signal VI_STAGED_DATA                  : unsigned(31 downto 0) := (others => '0');  -- 0x0440003C (RW): [31:0] STAGED_DATA<31:0>: Diagnostics only, usage unknown 
 
+   signal newFrame                        : std_logic;
    signal newLine                         : std_logic;
    
    -- fps counter
@@ -130,7 +132,6 @@ architecture arch of VI is
    signal fpscountBCD_next          : unsigned(7 downto 0) := (others => '0');
    signal fps_SecondCounter         : integer range 0 to 62499999 := 0;
    signal fps_VI_ORIGIN_last        : unsigned(23 downto 0) := (others => '0');
-   signal fps_vsync                 : std_logic := '0';
 
    -- savestates
    type t_ssarray is array(0 to 7) of std_logic_vector(63 downto 0);
@@ -165,13 +166,13 @@ begin
             VI_WIDTH                       <= unsigned(ss_in(0)(51 downto 40));             
             VI_INTR                        <= unsigned(ss_in(0)(61 downto 52));
             --VI_CURRENT                     <= unsigned(ss_in(1)(9 downto 0));             
-            VI_BURST_HWIDTH                <= unsigned(ss_in(1)(17 downto 10));             
+            --VI_HSYNC_WIDTH                 <= unsigned(ss_in(1)(17 downto 10));             
             VI_BURST_BURSTWIDTH            <= unsigned(ss_in(1)(25 downto 18));             
-            VI_BURST_VWIDTH                <= unsigned(ss_in(1)(29 downto 26));             
+            --VI_VSYNC_WIDTH                 <= unsigned(ss_in(1)(29 downto 26));             
             VI_BURST_START                 <= unsigned(ss_in(1)(39 downto 30));             
-            VI_V_SYNC                      <= unsigned(ss_in(1)(49 downto 40));   
+            --VI_V_SYNC                      <= unsigned(ss_in(1)(49 downto 40));   
             VI_TEST_ADDR                   <= unsigned(ss_in(1)(56 downto 50)); 
-            VI_H_SYNC_WIDTH                <= unsigned(ss_in(2)(11 downto  0));             
+            --VI_H_SYNC_LENGTH               <= unsigned(ss_in(2)(11 downto  0));             
             VI_H_SYNC_LEAP                 <= unsigned(ss_in(2)(20 downto 16));             
             VI_LEAP_A                      <= unsigned(ss_in(2)(32 downto 21));             
             VI_LEAP_B                      <= unsigned(ss_in(2)(48 downto 37)); 
@@ -185,7 +186,20 @@ begin
             VI_X_SCALE_OFFSET              <= unsigned(ss_in(5)(27 downto 16));             
             VI_Y_SCALE_FACTOR              <= unsigned(ss_in(5)(43 downto 32));             
             VI_Y_SCALE_OFFSET              <= unsigned(ss_in(5)(59 downto 48));                         
-            VI_STAGED_DATA                 <= unsigned(ss_in(4)(63 downto 32));  
+            VI_STAGED_DATA                 <= unsigned(ss_in(4)(63 downto 32));
+
+            -- reset to wrong values to have stable video out for analog
+            if (ISPAL = '1') then
+               VI_HSYNC_WIDTH   <= 8x"3A";
+               VI_VSYNC_WIDTH   <= 4x"4";
+               VI_V_SYNC        <= 10x"271";
+               VI_H_SYNC_LENGTH <= 12x"C69";
+            else
+               VI_HSYNC_WIDTH   <= 8x"39";
+               VI_VSYNC_WIDTH   <= 4x"5";
+               VI_V_SYNC        <= 10x"20D";
+               VI_H_SYNC_LENGTH <= 12x"C15";
+            end if;
 
             fpscountBCD_next               <= (others => '0');            
 
@@ -220,12 +234,12 @@ begin
                   when x"00008" => bus_dataRead(11 downto  0) <= std_logic_vector(VI_WIDTH           );    
                   when x"0000C" => bus_dataRead( 9 downto  0) <= std_logic_vector(VI_INTR            );    
                   when x"00010" => bus_dataRead( 9 downto  0) <= std_logic_vector(VI_CURRENT         );    
-                  when x"00014" => bus_dataRead( 7 downto  0) <= std_logic_vector(VI_BURST_HWIDTH    );    
+                  when x"00014" => bus_dataRead( 7 downto  0) <= std_logic_vector(VI_HSYNC_WIDTH     );    
                                    bus_dataRead(15 downto  8) <= std_logic_vector(VI_BURST_BURSTWIDTH);    
-                                   bus_dataRead(19 downto 16) <= std_logic_vector(VI_BURST_VWIDTH    );    
+                                   bus_dataRead(19 downto 16) <= std_logic_vector(VI_VSYNC_WIDTH     );    
                                    bus_dataRead(29 downto 20) <= std_logic_vector(VI_BURST_START     );    
                   when x"00018" => bus_dataRead( 9 downto  0) <= std_logic_vector(VI_V_SYNC          );    
-                  when x"0001C" => bus_dataRead(11 downto  0) <= std_logic_vector(VI_H_SYNC_WIDTH    );    
+                  when x"0001C" => bus_dataRead(11 downto  0) <= std_logic_vector(VI_H_SYNC_LENGTH   );    
                                    bus_dataRead(20 downto 16) <= std_logic_vector(VI_H_SYNC_LEAP     );    
                   when x"00020" => bus_dataRead(11 downto  0) <= std_logic_vector(VI_LEAP_A          );    
                                    bus_dataRead(27 downto 16) <= std_logic_vector(VI_LEAP_B          );    
@@ -268,12 +282,12 @@ begin
                   when x"00008" => VI_WIDTH            <= unsigned(bus_dataWrite(11 downto  0));    
                   when x"0000C" => VI_INTR             <= unsigned(bus_dataWrite( 9 downto  0));    
                   when x"00010" => irq_out <= '0';  
-                  when x"00014" => VI_BURST_HWIDTH     <= unsigned(bus_dataWrite( 7 downto  0));    
+                  when x"00014" => VI_HSYNC_WIDTH      <= unsigned(bus_dataWrite( 7 downto  0));    
                                    VI_BURST_BURSTWIDTH <= unsigned(bus_dataWrite(15 downto  8));    
-                                   VI_BURST_VWIDTH     <= unsigned(bus_dataWrite(19 downto 16));    
+                                   VI_VSYNC_WIDTH      <= unsigned(bus_dataWrite(19 downto 16));    
                                    VI_BURST_START      <= unsigned(bus_dataWrite(29 downto 20));    
                   when x"00018" => VI_V_SYNC           <= unsigned(bus_dataWrite( 9 downto  0));    
-                  when x"0001C" => VI_H_SYNC_WIDTH     <= unsigned(bus_dataWrite(11 downto  0));    
+                  when x"0001C" => VI_H_SYNC_LENGTH    <= unsigned(bus_dataWrite(11 downto  0));    
                                    VI_H_SYNC_LEAP      <= unsigned(bus_dataWrite(20 downto 16));    
                   when x"00020" => VI_LEAP_A           <= unsigned(bus_dataWrite(11 downto  0));    
                                    VI_LEAP_B           <= unsigned(bus_dataWrite(27 downto 16));    
@@ -294,8 +308,7 @@ begin
             end if;
             
             -- fps counter
-            fps_vsync <= video_vsync;
-            if (video_vsync = '1' and fps_vsync = '0') then
+            if (newFrame = '1') then
                fps_VI_ORIGIN_last <= VI_ORIGIN;
                if (VI_ORIGIN /= fps_VI_ORIGIN_last) then
                   if (fpscountBCD_next(3 downto 0) = x"9") then
@@ -339,7 +352,8 @@ begin
       error_vi                         => error_vi,
             
       ISPAL                            => ISPAL,        
-      CROPBOTTOM                       => CROPBOTTOM,
+      FIXEDBLANKS                      => FIXEDBLANKS,        
+      CROPVERTICAL                     => CROPVERTICAL,
       VI_BILINEAROFF                   => VI_BILINEAROFF,
       VI_GAMMAOFF                      => VI_GAMMAOFF,
       VI_NOISEOFF                      => VI_NOISEOFF,
@@ -366,11 +380,16 @@ begin
       VI_X_SCALE_OFFSET                => VI_X_SCALE_OFFSET,
       VI_Y_SCALE_FACTOR                => VI_Y_SCALE_FACTOR,
       VI_Y_SCALE_OFFSET                => VI_Y_SCALE_OFFSET,
-      VI_V_VIDEO_START                 => VI_V_VIDEO_START,
-      VI_V_VIDEO_END                   => VI_V_VIDEO_END,  
+      VI_V_SYNC                        => VI_V_SYNC,       
+      VI_H_SYNC_LENGTH                 => VI_H_SYNC_LENGTH, 
       VI_H_VIDEO_START                 => VI_H_VIDEO_START,
       VI_H_VIDEO_END                   => VI_H_VIDEO_END,  
+      VI_V_VIDEO_START                 => VI_V_VIDEO_START,
+      VI_V_VIDEO_END                   => VI_V_VIDEO_END,  
+      VI_HSYNC_WIDTH                   => VI_HSYNC_WIDTH,  
+      VI_VSYNC_WIDTH                   => VI_VSYNC_WIDTH,  
                   
+      newFrame                         => newFrame,
       newLine                          => newLine,
       VI_CURRENT                       => VI_CURRENT,
                   

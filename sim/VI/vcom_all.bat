@@ -11,6 +11,7 @@ vcom -2008 -quiet -work sim/n64 ^
 ../../rtl/VI_package.vhd ^
 ../../rtl/VI_overlay.vhd ^
 ../../rtl/VI_videoout_sync.vhd ^
+../../rtl/VI_videoout_async.vhd ^
 ../../rtl/VI_linefetch.vhd ^
 ../../rtl/VI_lineProcess.vhd ^
 ../../rtl/VI_filter_pen.vhd ^

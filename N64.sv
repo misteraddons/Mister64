@@ -215,8 +215,151 @@ pll2 pll2
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(clk_vid)
+	.outclk_0(clk_vid),
+   .reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
 );
+
+wire [63:0] reconfig_to_pll;
+wire [63:0] reconfig_from_pll;
+
+// the following code does copy bootup and switch behavior of the pll cfg(both match 100%, checked via signaltap), 
+// but the clock does not switch so there must be more actions going on between those two instances
+// most likely something after bootup, but not instantly
+
+// PAL
+// 0000000510000002h - state 0
+// 000000051C00017Ah - state 1
+// 0000000510000002h - state 2
+// 0000000510000002h - state 3
+// 000000051C200002h - state 4
+// 000000051C000176h - state 5
+// 000000051CEC3986h - state 6
+// 000000051FBF7D96h - state 7
+// 000000051C200176h - state 8
+// 0000000510000002h - state 9
+
+// NTSC
+// 0000000510000002h - state 0
+// 000000051C00017Ah - state 1
+// 0000000510000002h - state 2
+// 0000000510000002h - state 3
+// 000000051C200002h - state 4
+// 000000051C000176h - state 5
+// 000000051E949586h - state 6
+// 000000051F0CB196h - state 7
+// 000000051C200176h - state 8
+// 0000000510000002h - state 9
+
+//reg [63:0] reconfig_to_pll = 64'h000000053C000000;
+
+//always @(posedge CLK_50M) begin : cfg_block
+//	reg pald = 0, pald2 = 0;
+//	reg [3:0] state = 0;
+//   
+//   reg [3:0] resetstate = 0;
+//   reg [5:0] initCnt = 0;
+//   reg [9:0] resetCnt = 0; 
+//
+//	pald  <= status[79];
+//	pald2 <= pald;
+//	if(pald2 != pald) state <= 1;
+//   
+//   if (!resetstate[3]) begin
+//   
+//      case(resetstate[2:0])
+//         0: begin
+//            resetCnt <= resetCnt + 1'd1;
+//               if (resetCnt == 9'd340) begin
+//                  resetstate      <= resetstate + 1'd1;
+//                  reconfig_to_pll <= 64'h000000053C000006;
+//               end
+//            end
+//         1: begin resetstate <= resetstate + 1'd1; end
+//         2: begin
+//               reconfig_to_pll[9:4] <= initCnt;
+//               initCnt <= initCnt + 1'd1;
+//               if (initCnt == 6'h3F) begin
+//                  resetstate <= resetstate + 1'd1;
+//               end 
+//            end
+//         3: begin reconfig_to_pll <= 64'h000000053C000002; resetstate <= resetstate + 1'd1; end 
+//         4: begin reconfig_to_pll <= 64'h000000052C000002; resetstate <= resetstate + 1'd1; end 
+//         5: begin resetstate  <= resetstate + 1'd1; end 
+//         6: begin reconfig_to_pll <= 64'h000000053C000002; resetstate <= resetstate + 1'd1; end 
+//         7: begin resetstate  <= resetstate + 1'd1; end 
+//      endcase
+//   
+//   end else begin
+//   
+//      reconfig_to_pll <= 64'h0000000510000002;
+//   
+//      if(state) state<=state+1'd1;
+//      case(state)
+//         1: reconfig_to_pll <= 64'h000000051C00017A;
+//         2: reconfig_to_pll <= 64'h0000000510000002;
+//         3: reconfig_to_pll <= 64'h0000000510000002;
+//         4: reconfig_to_pll <= 64'h000000051C200002;
+//         5: reconfig_to_pll <= 64'h000000051C000176;
+//         6: reconfig_to_pll <= pald2 ? 64'h000000051CEC3986 : 64'h000000051E949586;
+//         7: reconfig_to_pll <= pald2 ? 64'h000000051FBF7D96 : 64'h000000051F0CB196;
+//         8: reconfig_to_pll <= 64'h000000051C200176;
+//         9: reconfig_to_pll <= 64'h0000000510000002;
+//      endcase
+//      
+//   end
+//end
+
+wire        cfg_waitrequest;
+reg         cfg_write;
+reg   [5:0] cfg_address;
+reg  [31:0] cfg_data;
+
+pll_cfg pll_cfg
+(
+	.mgmt_clk(CLK_50M),
+	.mgmt_reset(0),
+	.mgmt_waitrequest(cfg_waitrequest),
+	.mgmt_read(0),
+	.mgmt_readdata(),
+	.mgmt_write(cfg_write),
+	.mgmt_address(cfg_address),
+	.mgmt_writedata(cfg_data),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
+);
+
+always @(posedge CLK_50M) begin : cfg_block
+	reg pald = 0, pald2 = 0;
+	reg [2:0] state = 0;
+
+	pald  <= status[79];
+	pald2 <= pald;
+
+	cfg_write <= 0;
+	if(pald2 != pald) state <= 1;
+
+	if(!cfg_waitrequest) begin
+		if(state) state<=state+1'd1;
+		case(state)
+			1: begin
+					cfg_address <= 0;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+			3: begin
+					cfg_address <= 7;
+					cfg_data <= pald2 ? 4024384270 : 3274482981;
+					cfg_write <= 1;
+				end
+			5: begin
+					cfg_address <= 2;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+		endcase
+	end
+end
 
 wire reset_or = RESET | buttons[1] | status[0] | cartN64_download;
 
@@ -264,7 +407,8 @@ parameter CONF_STR = {
    "O[2],Error Overlay,Off,On;",
    "O[28],FPS Overlay,Off,On;",
    "O[8:7],Stereo Mix,None,25%,50%,100%;",
-   "O[45:44],Crop Bottom,None,8,16,24;",
+   "O[82],Fixed Video Blanks,On,Off;",
+   "O[45:44],Crop Vertical,None,8,12;",
    "O[48:47],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
    "-;",
    
@@ -625,7 +769,8 @@ n64top
    .fpscountOn(status[28]),
    
    .ISPAL(status[79]),
-   .CROPBOTTOM(status[45:44]),
+   .FIXEDBLANKS(~status[82]),
+   .CROPVERTICAL(status[45:44]),
    .VI_BILINEAROFF(status[32]),
    .VI_GAMMAOFF(status[33]),
    .VI_DEDITHEROFF(status[34]),
@@ -764,7 +909,7 @@ n64top
    .video_b          (VGA_B)
 );
 
-assign CLK_VIDEO = clk_1x;
+assign CLK_VIDEO = clk_vid;
 assign VGA_DE = ~(HBlank | VBlank);
 assign VGA_F1 = Interlaced ^ status[1];
 assign VGA_SL = 0;

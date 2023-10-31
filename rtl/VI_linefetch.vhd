@@ -23,7 +23,6 @@ entity VI_linefetch is
       VI_Y_SCALE_OFFSET  : in unsigned(11 downto 0);
       
       newFrame           : in  std_logic;
-      lineNr             : in  unsigned(8 downto 0);
       fetch              : in  std_logic;
       
       addr9_offset       : out taddr9offset := (others => 0);
@@ -69,13 +68,10 @@ architecture arch of VI_linefetch is
    );
    signal state            : tstate := IDLE;
    
-   signal newLine          : std_logic;
-   
    signal ram_offset       : signed(24 downto 0) := (others => '0');
    signal rdram_finished   : std_logic := '0';
    signal rdram9_finished  : std_logic := '0';
 
-   signal lineAct          : unsigned(8 downto 0) := (others => '0');
    signal lineInPtr        : std_logic_vector(2 downto 0) := (others => '0');
    signal lineInFetched    : unsigned(2 downto 0) := (others => '0');   
    signal lineProcCnt      : std_logic := '0';
@@ -93,8 +89,6 @@ begin
    line_prefetch <= 8 when (VI_CTRL_TYPE = "11") else 4;
    
    lineWidth     <= VI_WIDTH & "00" when (VI_CTRL_TYPE = "11") else '0' & VI_WIDTH & '0';
-  
-   newLine       <= '1' when (lineNr /= lineAct and fetch = '1') else '0';
   
    y_accu_new    <= y_accu + VI_Y_SCALE_FACTOR; 
    
@@ -115,7 +109,7 @@ begin
          startOut      <= '0';
          
          error_linefetch <= '0';
-         if (state /= IDLE and (newLine = '1' or newFrame = '1')) then
+         if (state /= IDLE and (fetch = '1' or newFrame = '1')) then
             error_linefetch <= '1';
          end if;
          
@@ -157,8 +151,7 @@ begin
                      lineProcCnt   <= '1';
                      state         <= REQUESTLINE;
                   end if;
-                  lineAct  <= lineNr;
-                  if (newLine = '1') then
+                  if (fetch = '1') then
                      y_accu <= y_accu_new; 
                      if (y_diff > 0) then
                         state <= REQUESTLINE;
