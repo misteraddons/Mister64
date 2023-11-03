@@ -556,7 +556,7 @@ begin
    fpstext( 7 downto 0) <= resize(fpscountBCD(3 downto 0), 8) + 16#30#;
    fpstext(15 downto 8) <= resize(fpscountBCD(7 downto 4), 8) + 16#30#;
    
-   ioverlayFPS : entity work.VI_overlay generic map (2, 4, 4, x"0000FF")
+   ioverlayFPS : entity work.VI_overlay generic map (2, 4, 16, x"0000FF")
    port map
    (
       clk                    => clkvid,

@@ -835,6 +835,7 @@ begin
    port map
    (
       clk1x                => clk1x,        
+      clkvid               => clkvid,        
       ce                   => ce_1x,           
       reset                => reset_intern_1x, 
 

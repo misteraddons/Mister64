@@ -9,6 +9,7 @@ entity AI is
    port 
    (
       clk1x            : in  std_logic;
+      clkvid           : in  std_logic;
       ce               : in  std_logic;
       reset            : in  std_logic;
       
@@ -59,27 +60,36 @@ architecture arch of AI is
    
    signal carry               : std_logic := '0';
    signal fillcount           : integer range 0 to 2 := 0;
-   signal waittime            : unsigned(14 downto 0) := (others => '0');
 
    type tState is
    (
       IDLE,
       NEXTDMA,
-      STARTFETCH,
       FETCHNEXT,
       FETCHNEXT2
    );
-   signal state                     : tState := IDLE;
+   signal state               : tState := IDLE;
+         
+   signal dataNext            : std_logic_vector(63 downto 0);
+   signal dataValid           : std_logic := '0';
+   signal validCnt            : integer range 0 to 15 := 0;
    
-   signal dataNext      : std_logic_vector(31 downto 0);
+   -- clock domain crossing
+   signal fifo_nearfull_clk1x : std_logic_vector(3 downto 0);
    
-   signal fifo_Din      : std_logic_vector(31 downto 0);
-   signal fifo_wr       : std_logic := '0';
-   signal error_Fifo    : std_logic;
-   signal fifo_nearfull : std_logic;
-   signal fifo_Dout     : std_logic_vector(31 downto 0);
-   signal fifo_Rd       : std_logic := '0';
-   signal fifo_Empty    : std_logic;
+   signal dataValid_clkvid    : std_logic_vector(3 downto 0);
+      
+   -- clk vid signals   
+   signal waittime            : unsigned(13 downto 0) := (others => '0');
+   signal fifo_next           : std_logic := '0';
+         
+   signal fifo_Din            : std_logic_vector(31 downto 0);
+   signal fifo_wr             : std_logic := '0';
+   signal error_Fifo          : std_logic;
+   signal fifo_nearfull       : std_logic;
+   signal fifo_Dout           : std_logic_vector(31 downto 0);
+   signal fifo_Rd             : std_logic := '0';
+   signal fifo_Empty          : std_logic;
    
    -- savestates
    type t_ssarray is array(0 to 3) of std_logic_vector(63 downto 0);
@@ -100,8 +110,7 @@ begin
       
          rdram_request <= '0';
          
-         fifo_wr <= '0';
-         fifo_rd <= '0';
+         fifo_nearfull_clk1x <= fifo_nearfull_clk1x(2 downto 0) & fifo_nearfull;
       
          if (reset = '1') then
             
@@ -121,8 +130,9 @@ begin
                  
             carry                <= ss_in(1)(43); --'0';
             fillcount            <= to_integer(unsigned(ss_in(1)(45 downto 44))); -- 0 
-            waittime             <= unsigned(ss_in(2)(14 downto  0)); -- (others => '0');
             state                <= IDLE;
+            
+            dataValid            <= '0';
             
          elsif (ce = '1') then
          
@@ -136,39 +146,24 @@ begin
                bus_write_latch <= '1';
             end if;
             
-            if (waittime > 0) then
-               waittime <= waittime - 1;
+            if (validCnt > 0) then
+               validCnt <= validCnt - 1;
             end if;
 
             case (state) is
             
                when IDLE => 
-                  if (waittime = 0) then
+                  if (fifo_nearfull_clk1x(3) = '0' and fillcount > 0) then
                   
-                     waittime <= resize(AI_DACRATE,15) + (resize(AI_DACRATE,15) / 4) + (resize(AI_DACRATE,15) / 32); -- hack, should use video clock!
-                     if (AI_DACRATE < 16#200#) then
-                        waittime <= 15x"0200"; 
-                     end if;
-                     
-                     if (fillcount > 0) then
-                        if (AI_LEN > 0 and AI_CONTROL_DMAON = '1') then
-                           state         <= STARTFETCH;
-                           if (carry = '1') then
-                              carry        <= '0';
-                              AI_DRAM_ADDR <= AI_DRAM_ADDR + 16#2000#;
-                           end if;                           
-                        elsif (AI_LEN = 0) then
-                           state <= NEXTDMA;
-                        end if;
-                     end if;
-                     
-                     if (fifo_Empty = '0') then
-                        fifo_Rd         <= '1';
-                        sound_out_left  <= fifo_Dout(7 downto 0) & fifo_Dout(15 downto 8);
-                        sound_out_right <= fifo_Dout(23 downto 16) & fifo_Dout(31 downto 24);
-                     else
-                        sound_out_left  <= (others => '0');
-                        sound_out_right <= (others => '0');
+                     if (AI_LEN > 0 and AI_CONTROL_DMAON = '1') then
+                        state         <= FETCHNEXT;
+                        rdram_request <= '1';
+                        if (carry = '1') then
+                           carry        <= '0';
+                           AI_DRAM_ADDR <= AI_DRAM_ADDR + 16#2000#;
+                        end if;                           
+                     elsif (AI_LEN = 0) then
+                        state <= NEXTDMA;
                      end if;
                      
                   elsif (bus_read_latch = '1') then
@@ -223,42 +218,82 @@ begin
                   end if;
                   fillcount <= fillcount - 1;
                   
-               when STARTFETCH =>
-                  if (fifo_nearfull = '0') then
-                     state         <= FETCHNEXT;
-                     rdram_request <= '1';
-                  else
-                     state         <= IDLE;
-                  end if;
-                  
                when FETCHNEXT =>
                   if (rdram_done = '1') then
-                     state    <= FETCHNEXT2;
-                     dataNext <= rdram_dataRead(63 downto 32);
-                     fifo_Din <= rdram_dataRead(31 downto 0);
-                     fifo_wr  <= '1';
+                     state     <= FETCHNEXT2;
+                     dataNext  <= rdram_dataRead;
+                     validCnt  <= 15;
                   end if;
                   
                when FETCHNEXT2 => 
-                  fifo_Din <= dataNext;
-                  fifo_wr  <= '1';
+                  if (validCnt = 12) then -- delay valid for some cycles, so dataNext is stable and doesn't need CDC                  
+                     dataValid <= '1';
+                  end if;
+                  if (validCnt = 0) then
+                     dataValid <= '0';
                   
-                  AI_DRAM_ADDR(12 downto 0) <= AI_DRAM_ADDR(12 downto 0) + 8;
-                  carry <= '0';
-                  if (AI_DRAM_ADDR(12 downto 3) = 10x"3FF") then
-                     carry <= '1';
-                  end if;                     
-                  
-                  AI_LEN <= AI_LEN - 8;
-                  if (AI_LEN = 8) then
-                     state <= NEXTDMA;
-                  else
-                     state <= IDLE;
+                     AI_DRAM_ADDR(12 downto 0) <= AI_DRAM_ADDR(12 downto 0) + 8;
+                     carry <= '0';
+                     if (AI_DRAM_ADDR(12 downto 3) = 10x"3FF") then
+                        carry <= '1';
+                     end if;                     
+                     
+                     AI_LEN <= AI_LEN - 8;
+                     if (AI_LEN = 8) then
+                        state <= NEXTDMA;
+                     else
+                        state <= IDLE;
+                     end if;
                   end if;
                   
             end case;
 
          end if;
+      end if;
+   end process;
+   
+   
+   process (clkvid)
+   begin
+      if rising_edge(clkvid) then
+      
+         fifo_wr   <= '0';
+         fifo_rd   <= '0';
+         fifo_next <= '0';
+      
+         dataValid_clkvid <= dataValid_clkvid(2 downto 0) & dataValid;
+         
+         -- fifo fill
+         if (dataValid_clkvid(3) = '0' and dataValid_clkvid(2) = '1') then
+            fifo_wr   <= '1';
+            fifo_Din  <= dataNext(31 downto 0);
+            fifo_next <= '1';
+         end if;
+         
+         if (fifo_next = '1') then
+            fifo_wr   <= '1';
+            fifo_Din  <= dataNext(63 downto 32);
+         end if;
+         
+         -- timing for readout
+         waittime <= waittime - 1;
+         if (waittime = 0) then
+         
+            waittime <= AI_DACRATE; -- no clock domain crossing, should not change while playing sound
+            if (AI_DACRATE < 16#200#) then
+               waittime <= 14x"200"; 
+            end if;
+            
+            if (fifo_Empty = '0') then
+               fifo_Rd         <= '1';
+               sound_out_left  <= fifo_Dout(7 downto 0) & fifo_Dout(15 downto 8);
+               sound_out_right <= fifo_Dout(23 downto 16) & fifo_Dout(31 downto 24);
+            else
+               sound_out_left  <= (others => '0');
+               sound_out_right <= (others => '0');
+            end if;  
+         end if;
+         
       end if;
    end process;
    
@@ -271,7 +306,7 @@ begin
    )
    port map
    ( 
-      clk      => clk1x,
+      clk      => clkvid,
       reset    => '0',  
       Din      => fifo_Din,     
       Wr       => fifo_wr,      
@@ -341,10 +376,11 @@ begin
                out_count <= (others => '0');
             end if;
             
-            wait until rising_edge(clk1x);
+            wait until rising_edge(clkvid);
 
             if (waittime = 0) then
-               wait until rising_edge(clk1x);
+               wait until rising_edge(clkvid);
+               wait until rising_edge(clkvid);
                
                write(line_out, to_hstring(sound_out_left & sound_out_right));
                writeline(outfile, line_out);

@@ -189,10 +189,6 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 
-wire [1:0] ar = status[48:47];
-assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
-assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
-
 ///////////////////////  CLOCK/RESET  ///////////////////////////////////
 
 wire clk_1x;
@@ -395,22 +391,24 @@ parameter CONF_STR = {
    "O[62:61],Dual Controller,Off,P1->P2,P1->P3;",
    "O[63],Analog Stick Swap,Off,On;",
 	"-;",
-   "O[30],Texture Filter,Original,Off;",
-   "O[31],Dithering,Original,Off;",
-   "O[32],VI Bilinear,Original,Off;",
-   "O[33],VI Gamma,Original,Off;",
-   "O[34],VI Dedither,Original,Off;",
-   "O[35],VI Antialias,Original,Off;",
-   "O[36],VI Divot,Original,Off;",
-   "O[37],VI Noisedither,Original,Off;",
-   "-;",
-   "O[2],Error Overlay,Off,On;",
-   "O[28],FPS Overlay,Off,On;",
-   "O[8:7],Stereo Mix,None,25%,50%,100%;",
-   "O[82],Fixed Video Blanks,On,Off;",
-   "O[45:44],Crop Vertical,None,8,12;",
-   "O[48:47],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-   "-;",
+   
+   "P1,Video & Audio;",
+   "P1O[8:7],Stereo Mix,None,25%,50%,100%;",
+   "P1O[82],Fixed Video Blanks,On,Off;",
+   "D0P1O[45:44],Crop Vertical,None,8,12;",
+   "P1O[48:47],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+   "P1-;",
+   "P1O[30],Texture Filter,Original,Off;",
+   "P1O[31],Dithering,Original,Off;",
+   "P1O[32],VI Bilinear,Original,Off;",
+   "P1O[33],VI Gamma,Original,Off;",
+   "P1O[34],VI Dedither,Original,Off;",
+   "P1O[35],VI Antialias,Original,Off;",
+   "P1O[36],VI Divot,Original,Off;",
+   "P1O[37],VI Noisedither,Original,Off;",
+   "P1-;",
+   "P1O[2],Error Overlay,Off,On;",
+   "P1O[28],FPS Overlay,Off,On;",
    
    "P2,System settings;",
 	"P2-;",
@@ -425,7 +423,6 @@ parameter CONF_STR = {
    "P2O[73],TransferPak,Off,On;",
    "P2O[74],RTC,Off,On;",
    "P2O[77:75],Save Type,None,EEPROM4,EEPROM16,SRAM32,SRAM96,Flash;",
-   "-;",
    
    "P3,Debug settings;",
    "P3O[43],Data Cache,On,Off;",
@@ -479,7 +476,7 @@ wire [15:0] joystick_analog_l3;
 wire [10:0] ps2_key;
 
 wire [127:0] status_in = {status[127:40],ss_slot,status[37:0]};
-wire [15:0] status_menumask = 16'd0;
+wire [15:0] status_menumask = {15'd0, status[82]};
 
 wire DIRECT_VIDEO;
 
@@ -914,6 +911,34 @@ assign VGA_DE = ~(HBlank | VBlank);
 assign VGA_F1 = Interlaced ^ status[1];
 assign VGA_SL = 0;
 assign VGA_DISABLE = 0;
+   
+reg [11:0] ARCoreX = 12'd4;
+reg [11:0] ARCoreY = 12'd3;
+   
+always @(posedge clk_1x) begin
+   if (status[82]) begin // fixed blanks off
+      ARCoreX <= 12'd4;
+      ARCoreY <= 12'd3;
+   end else begin
+      if (status[79]) begin // PAL
+         case(status[45:44]) // crop
+            2'b00 : begin ARCoreX <= 12'd512 ; ARCoreY <= 12'd387 ; end
+            2'b01 : begin ARCoreX <= 12'd1024; ARCoreY <= 12'd731 ; end
+            2'b10 : begin ARCoreX <= 12'd2048; ARCoreY <= 12'd1419; end
+         endcase;
+      end else begin // NTSC
+         case(status[45:44]) // crop
+            2'b00 : begin ARCoreX <= 12'd512 ; ARCoreY <= 12'd381 ; end
+            2'b01 : begin ARCoreX <= 12'd1280; ARCoreY <= 12'd889 ; end
+            2'b10 : begin ARCoreX <= 12'd2560; ARCoreY <= 12'd1714; end
+         endcase;
+      end
+   end
+end
+   
+wire [1:0] ar = status[48:47];
+assign VIDEO_ARX = (!ar) ? ARCoreX : (ar - 1'd1);
+assign VIDEO_ARY = (!ar) ? ARCoreY : 12'd0;
 
 ////////////////////////////  SNAC  ///////////////////////////////////
 

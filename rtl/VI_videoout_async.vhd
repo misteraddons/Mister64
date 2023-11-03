@@ -242,13 +242,13 @@ begin
             if (hpos = videoout_settings.VI_H_SYNC_LENGTH or hpos = videoout_settings.VI_H_SYNC_LENGTH(11 downto 1)) then
                if (vpos_half >= videoout_settings.VI_V_SYNC) then
                   vpos_half          <= (others => '0');
-                  hpos               <= (others => '0');
                   clkdiv             <= (others => '0');
                   v_start_last       <= videoout_settings.VI_V_VIDEO_START(9 downto 1);
                   if (videoout_settings.CTRL_SERRATE = '1') then 
                      videoout_reports.interlacedDisplayField <= not videoout_reports.interlacedDisplayField;
                   else 
                      videoout_reports.interlacedDisplayField <= '0';
+                     hpos                                    <= (others => '0');
                   end if;
                else
                   vpos_half <= vpos_half + 1;

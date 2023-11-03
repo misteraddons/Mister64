@@ -189,16 +189,23 @@ begin
             VI_STAGED_DATA                 <= unsigned(ss_in(4)(63 downto 32));
 
             -- reset to wrong values to have stable video out for analog
-            if (ISPAL = '1') then
-               VI_HSYNC_WIDTH   <= 8x"3A";
-               VI_VSYNC_WIDTH   <= 4x"4";
-               VI_V_SYNC        <= 10x"271";
-               VI_H_SYNC_LENGTH <= 12x"C69";
+            if (VITEST = '1') then         
+               VI_HSYNC_WIDTH      <= unsigned(ss_in(1)(17 downto 10));             
+               VI_VSYNC_WIDTH      <= unsigned(ss_in(1)(29 downto 26));                        
+               VI_V_SYNC           <= unsigned(ss_in(1)(49 downto 40));   
+               VI_H_SYNC_LENGTH    <= unsigned(ss_in(2)(11 downto  0));    
             else
-               VI_HSYNC_WIDTH   <= 8x"39";
-               VI_VSYNC_WIDTH   <= 4x"5";
-               VI_V_SYNC        <= 10x"20D";
-               VI_H_SYNC_LENGTH <= 12x"C15";
+               if (ISPAL = '1') then
+                  VI_HSYNC_WIDTH   <= 8x"3A";
+                  VI_VSYNC_WIDTH   <= 4x"4";
+                  VI_V_SYNC        <= 10x"271";
+                  VI_H_SYNC_LENGTH <= 12x"C69";
+               else
+                  VI_HSYNC_WIDTH   <= 8x"39";
+                  VI_VSYNC_WIDTH   <= 4x"5";
+                  VI_V_SYNC        <= 10x"20D";
+                  VI_H_SYNC_LENGTH <= 12x"C15";
+               end if;
             end if;
 
             fpscountBCD_next               <= (others => '0');            
