@@ -153,20 +153,7 @@ begin
             case (state) is
             
                when IDLE => 
-                  if (fifo_nearfull_clk1x(3) = '0' and fillcount > 0) then
-                  
-                     if (AI_LEN > 0 and AI_CONTROL_DMAON = '1') then
-                        state         <= FETCHNEXT;
-                        rdram_request <= '1';
-                        if (carry = '1') then
-                           carry        <= '0';
-                           AI_DRAM_ADDR <= AI_DRAM_ADDR + 16#2000#;
-                        end if;                           
-                     elsif (AI_LEN = 0) then
-                        state <= NEXTDMA;
-                     end if;
-                     
-                  elsif (bus_read_latch = '1') then
+                  if (bus_read_latch = '1') then
                      bus_done       <= '1';
                      bus_read_latch <= '0';
                      case (bus_addr(19 downto 2) & "00") is   
@@ -179,7 +166,9 @@ begin
                            if (fillcount > 1) then bus_dataRead(0) <= '1'; end if;
                         when others   => bus_dataRead(17 downto 0) <= std_logic_vector(AI_LEN);                  
                      end case;
+                     
                   elsif (bus_write_latch = '1') then
+                  
                      bus_done        <= '1';
                      bus_write_latch <= '0';
                      case (bus_addr(19 downto 2) & "00") is
@@ -207,6 +196,20 @@ begin
                         
                         when others   => null;                  
                      end case;
+                     
+                  elsif (fifo_nearfull_clk1x(3) = '0' and fillcount > 0) then
+                  
+                     if (AI_LEN > 0 and AI_CONTROL_DMAON = '1') then
+                        state         <= FETCHNEXT;
+                        rdram_request <= '1';
+                        if (carry = '1') then
+                           carry        <= '0';
+                           AI_DRAM_ADDR <= AI_DRAM_ADDR + 16#2000#;
+                        end if;                           
+                     elsif (AI_LEN = 0) then
+                        state <= NEXTDMA;
+                     end if;
+                     
                   end if;
                   
                when NEXTDMA =>
