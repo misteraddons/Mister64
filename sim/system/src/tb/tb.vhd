@@ -81,8 +81,10 @@ begin
    
    reset  <= not n64_on(0);
    
-   -- NTSC 53.693175 mhz => 30 ns * 33.8688 / 53.693175 / 2 = 9.4617612014 ns
-   clkvid <= not clkvid after 9462 ps;
+   -- NTSC 48.68 Mhz - 773.5 * 263 - 3094 clock cycles per line (VI_H_SYNC), 526/525 half lines (VI_V_SYNC)
+   clkvid <= not clkvid after 10271 ps;
+   -- PAL 49.65 Mhz - 3178 clock cycles per line, 626/625 half lines
+   --clkvid <= not clkvid after 10070 ps;
    
    -- registers
    iReg_n64_on            : entity procbus.eProcReg generic map (Reg_n64_on)        port map (clk1x, proc_bus_in, n64_on        , n64_on);      

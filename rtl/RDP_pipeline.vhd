@@ -211,6 +211,7 @@ architecture arch of RDP_pipeline is
    signal combine_color       : tcolor3_u8;
    signal combine_alpha       : unsigned(7 downto 0);
    signal combine_alpha2      : unsigned(7 downto 0);
+   signal combine_alpha_save  : signed(9 downto 0);
    signal combine_CVGCount    : unsigned(3 downto 0);
    signal cvg_overflow        : std_logic;
       
@@ -1322,7 +1323,7 @@ begin
       texture2_color          => texture2_color,
       tex2_alpha              => texture2_alpha,
       lod_frac                => x"FF", -- todo
-      combine_alpha           => combine_alpha,
+      combine_alpha           => combine_alpha_save,
       random2                 => lfsr(1 downto 0),
      
       combine_color           => combine_color
@@ -1354,6 +1355,7 @@ begin
       cvg_overflow            => cvg_overflow,
       combine_alpha           => combine_alpha,
       combine_alpha2          => combine_alpha2,
+      combine_alpha_save      => combine_alpha_save,
       combine_CVGCount        => combine_CVGCount
    );
    

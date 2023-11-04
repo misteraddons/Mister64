@@ -185,6 +185,7 @@ architecture arch of VI_videoout is
    signal videoout_readAddr   : unsigned(10 downto 0);
 
    -- overlay
+   signal overlay_xpos        : unsigned(9 downto 0);
    signal overlay_ypos        : unsigned(8 downto 0);
    
    signal overlay_data        : std_logic_vector(23 downto 0);
@@ -542,6 +543,7 @@ begin
       videoout_readAddr       => videoout_readAddr,  
       videoout_pixelRead      => outram_do_B,   
    
+      overlay_xpos            => overlay_xpos,
       overlay_ypos            => overlay_ypos,
       overlay_data            => overlay_data,
       overlay_ena             => overlay_ena,                     
@@ -562,7 +564,7 @@ begin
       clk                    => clkvid,
       ce                     => videoout_out.ce,
       ena                    => fpscountOn,                    
-      i_pixel_out_x          => to_integer(videoout_readAddr(9 downto 0)),
+      i_pixel_out_x          => to_integer(overlay_xpos),
       i_pixel_out_y          => to_integer(overlay_ypos),
       o_pixel_out_data       => overlay_fps_data,
       o_pixel_out_ena        => overlay_fps_ena,
@@ -582,7 +584,7 @@ begin
       clk                    => clkvid,
       ce                     => videoout_out.ce,
       ena                    => errorEna,                    
-      i_pixel_out_x          => to_integer(videoout_readAddr(9 downto 0)),
+      i_pixel_out_x          => to_integer(overlay_xpos),
       i_pixel_out_y          => to_integer(overlay_ypos),
       o_pixel_out_data       => overlay_error_data,
       o_pixel_out_ena        => overlay_error_ena,

@@ -14,11 +14,7 @@ end entity;
 
 architecture arch of etb is
 
-   constant clk_speed         : integer := 62500000;
-   constant baud              : integer := 10000000;
-         
    signal clk1x               : std_logic := '1';
-   signal clk93               : std_logic := '1';
    signal clk2x               : std_logic := '1';
    signal clkvid              : std_logic := '1';
    
@@ -103,14 +99,15 @@ architecture arch of etb is
 begin
 
    clk1x <= not clk1x after 8 ns;
-   clk93 <= not clk93 after 6 ns;
    clk2x <= not clk2x after 4 ns;
    
    reset_in  <= '0' after 3000 ns;
    
-   -- NTSC 53.693175 mhz => 30 ns * 33.8688 / 53.693175 / 2 = 9.4617612014 ns
-   --clkvid <= not clkvid after 9462 ps;
-   clkvid <= not clkvid after 8 ns;
+   -- NTSC 48.68 Mhz - 773.5 * 263 - 3094 clock cycles per line (VI_H_SYNC), 526/525 half lines (VI_V_SYNC)
+   clkvid <= not clkvid after 10271 ps;
+   -- PAL 49.65 Mhz - 3178 clock cycles per line, 626/625 half lines
+   --clkvid <= not clkvid after 10070 ps;
+
    
     -- top level replication
     
@@ -148,7 +145,8 @@ begin
       reset_1x             => reset_out, 
       
       ISPAL                => '0',
-      CROPBOTTOM           => "00",
+      FIXEDBLANKS          => '0',
+      CROPVERTICAL         => "00",
       VI_BILINEAROFF       => '0',
       VI_GAMMAOFF          => '0',
       VI_NOISEOFF          => '1',
@@ -284,9 +282,14 @@ begin
    );
    
    iSDRamMux : entity n64.SDRamMux
+   generic map
+   (
+      FASTSIM => '1'
+   )
    port map
    (
       clk1x                => clk1x,
+      ss_reset             => '0',
                            
       error                => open,
                            

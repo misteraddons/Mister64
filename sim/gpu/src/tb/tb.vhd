@@ -179,6 +179,8 @@ begin
       ce                   => '1',           
       reset                => reset_out, 
 
+      CICTYPE              => "0000",
+
       DISABLEFILTER        => '0',
       DISABLEDITHER        => '0',
       write9               => '1',
@@ -279,7 +281,8 @@ begin
       reset_1x             => reset_out, 
       
       ISPAL                => '0',
-      CROPBOTTOM           => "00",
+      FIXEDBLANKS          => '0',
+      CROPVERTICAL         => "00",
       VI_BILINEAROFF       => '1',
       VI_GAMMAOFF          => '1',
       VI_NOISEOFF          => '1',
@@ -416,9 +419,14 @@ begin
    );
    
    iSDRamMux : entity n64.SDRamMux
+   generic map
+   (
+      FASTSIM => '0'
+   )
    port map
    (
       clk1x                => clk1x,
+      ss_reset             => '0',
                            
       error                => open,
                            

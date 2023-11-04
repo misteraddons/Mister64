@@ -920,12 +920,12 @@ begin
                      line_indexXZ <= calcIndex;
                      line_indexX9 <= calcIndex + to_integer(calcPixelStartZ(4 downto 1));
                      case (settings_colorImage.FB_size) is
-                        when SIZE_8BIT  => line_offsetPx <= lineInfo.xStart(2 downto 0);
-                        when SIZE_16BIT => line_offsetPx <= "0" & lineInfo.xStart(1 downto 0);
-                        when SIZE_32BIT => line_offsetPx <= "00" & lineInfo.xStart(0);
+                        when SIZE_8BIT  => line_offsetPx <= calcPixelStart(2 downto 0);          
+                        when SIZE_16BIT => line_offsetPx <= "0" & calcPixelStart(2 downto 1);
+                        when SIZE_32BIT => line_offsetPx <= "00" & calcPixelStart(2);  
                         when others => null;
                      end case;
-                     line_offsetPxZ <= lineInfo.xStart(1 downto 0);
+                     line_offsetPxZ <= calcPixelStart(2 downto 1);
                   end if;
                   
                   if (settings_poly.lft = '1') then

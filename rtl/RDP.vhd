@@ -1676,13 +1676,13 @@ begin
             
                export_gpu32( 3, tracecounts_out( 3), export_pipeO,    outfile); tracecounts_out( 3) <= tracecounts_out( 3) + 1;
                export_gpu32( 4, tracecounts_out( 4), export_color,    outfile); tracecounts_out( 4) <= tracecounts_out( 4) + 1;
-               export_gpu32(25, tracecounts_out(25), export_RGBA,     outfile); tracecounts_out(25) <= tracecounts_out(25) + 1;
+               --export_gpu32(25, tracecounts_out(25), export_RGBA,     outfile); tracecounts_out(25) <= tracecounts_out(25) + 1;
                
                texfetch_count := tracecounts_out(7);
                texcolor_count := tracecounts_out(13);
                
                if (useTexture = '1') then
-                  export_gpu32(19, tracecounts_out(19), export_LOD,      outfile); tracecounts_out(19) <= tracecounts_out(19) + 1;
+                  --export_gpu32(19, tracecounts_out(19), export_LOD,      outfile); tracecounts_out(19) <= tracecounts_out(19) + 1;
                   export_gpu32(11, tracecounts_out(11), export_TexCoord, outfile); tracecounts_out(11) <= tracecounts_out(11) + 1;
                   --if (settings_otherModes.sampleType = '1' or settings_otherModes.enTlut = '1') then
                   --   export_gpu32(7, texfetch_count + 0, export_TexFetch0, outfile);
@@ -1975,10 +1975,10 @@ begin
                   -- resize(settings_colorImage.FB_base + ((line_posY * (settings_colorImage.FB_width_m1 + 1)) + line_posX) * 2, 26)
                   linesize := (to_integer(settings_colorImage.FB_width_m1) + 1) * 2;                
                   calcaddr := to_integer(addr) - to_integer(settings_colorImage.FB_base);
-                  ypos     := calcaddr / linesize;
-                  xpos     := (calcaddr - (ypos * linesize)) / 2;
                   
                   for i in 0 to 3 loop
+                     ypos := calcaddr / linesize;
+                     xpos := (calcaddr - (ypos * linesize)) / 2;
                      if (be(1 downto 0) = "11") then
                         data(15 downto 0) := byteswap16(data(15 downto 0));                  
                         color(23 downto 16) := data(15 downto 11) & "000";
@@ -1991,7 +1991,7 @@ begin
                         write(line_out, ypos);
                         writeline(outfile, line_out);
                      end if;
-                     xpos := xpos + 1;
+                     calcaddr := calcaddr + 2;
                      data := 16x"0" & data(63 downto 16);
                      be := "00" & be(7 downto 2);
                   end loop;
@@ -2005,10 +2005,10 @@ begin
                   -- resize(settings_colorImage.FB_base + ((line_posY * (settings_colorImage.FB_width_m1 + 1)) + line_posX) * 4, 26)
                   linesize := (to_integer(settings_colorImage.FB_width_m1) + 1) * 4;                
                   calcaddr := to_integer(addr) - to_integer(settings_colorImage.FB_base);
-                  ypos     := calcaddr / linesize;
-                  xpos     := (calcaddr - (ypos * linesize)) / 4;
                   
                   for i in 0 to 1 loop
+                     ypos     := calcaddr / linesize;
+                     xpos     := (calcaddr - (ypos * linesize)) / 4;
                      if (be(3 downto 0) = "1111") then
                         data(31 downto 0) := byteswap32(data(31 downto 0));                  
                         color(23 downto 16) := data(31 downto 24);
@@ -2021,7 +2021,7 @@ begin
                         write(line_out, ypos);
                         writeline(outfile, line_out);
                      end if;
-                     xpos := xpos + 1;
+                     calcaddr := calcaddr + 4;
                      data := 32x"0" & data(63 downto 32);
                      be := "0000" & be(7 downto 4);
                   end loop;

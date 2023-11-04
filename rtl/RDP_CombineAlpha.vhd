@@ -31,6 +31,7 @@ entity RDP_CombineAlpha is
       cvg_overflow            : out std_logic;
       combine_alpha           : out unsigned(7 downto 0) := (others => '0');
       combine_alpha2          : out unsigned(7 downto 0) := (others => '0');
+      combine_alpha_save      : out signed(9 downto 0) := (others => '0');
       combine_CVGCount        : out unsigned(3 downto 0) := (others => '0')
    );
 end entity;
@@ -136,6 +137,8 @@ begin
    cvgCount_select <= cvgmul(11 downto 8) when (settings_otherModes.cvgTimesAlpha = '1') else cvgCount;
 
    cvg_overflow <= '1' when (cvgFB + cvgCount_select >= 8) else '0';
+
+   combine_alpha_save <= combine_alpha_next;
 
    process (clk1x)
       variable calc_alpha : unsigned(8 downto 0);

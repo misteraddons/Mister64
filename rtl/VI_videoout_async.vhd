@@ -26,6 +26,7 @@ entity vi_videoout_async is
       videoout_readAddr       : out unsigned(10 downto 0) := (others => '0');
       videoout_pixelRead      : in  std_logic_vector(23 downto 0);
       
+      overlay_xpos            : out unsigned(9 downto 0);
       overlay_ypos            : out unsigned(8 downto 0);
       overlay_data            : in  std_logic_vector(23 downto 0);
       overlay_ena             : in  std_logic;
@@ -285,6 +286,10 @@ begin
                if (hpos(11 downto 2) >= videoout_settings.VI_H_VIDEO_START) then
                   videoout_readAddr     <= videoout_readAddr + 1;
                end if;
+               
+               if ((videoout_settings.isPAL = '1' and hpos(11 downto 2) >= 128) or (videoout_settings.isPAL = '0' and hpos(11 downto 2) >= 108)) then
+                  overlay_xpos <= overlay_xpos + 1;
+               end if;
             
                if (overlay_ena = '1') then
                   videoout_out.r      <= overlay_data( 7 downto 0);
@@ -306,6 +311,7 @@ begin
             
             if (hpos = 1) then
                videoout_readAddr <= lineIn(0) & 10x"00";
+               overlay_xpos      <= (others => '0');
             end if; 
             
          
