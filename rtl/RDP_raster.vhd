@@ -925,7 +925,7 @@ begin
                         when SIZE_32BIT => line_offsetPx <= "00" & calcPixelStart(2);  
                         when others => null;
                      end case;
-                     line_offsetPxZ <= calcPixelStart(2 downto 1);
+                     line_offsetPxZ <= calcPixelStartZ(2 downto 1);
                   end if;
                   
                   if (settings_poly.lft = '1') then

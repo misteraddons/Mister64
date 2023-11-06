@@ -13,7 +13,8 @@ entity cpu_datacache is
       clk2x             : in  std_logic;
       reset_93          : in  std_logic;
       ce_93             : in  std_logic;
-      stall             : in unsigned(4 downto 0);
+      stall             : in  unsigned(4 downto 0);
+      stall1            : in  std_logic;
       stall4            : in  std_logic;
       
       slow_in           : in  std_logic_vector(3 downto 0); 
@@ -435,7 +436,9 @@ begin
                   end if;
                   
                when WRITEBACK1ADDR =>
-                  state <= WRITEBACK1READ;
+                  if (stall1 = '0') then
+                     state <= WRITEBACK1READ;
+                  end if;
                
                when WRITEBACK1READ =>
                   state          <= WRITEBACK1WRITE;

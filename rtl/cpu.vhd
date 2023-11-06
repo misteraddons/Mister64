@@ -111,12 +111,22 @@ architecture arch of cpu is
    signal mem4_mask_latched            : std_logic_vector(7 downto 0) := (others => '0');  
    signal mem4_cache_latched           : std_logic := '0';
           
+   signal writefifo_Din                : std_logic_vector(107 downto 0);
+   signal writefifo_wr                 : std_logic := '0';
+   signal writefifo_nearfull           : std_logic;
+   signal writefifo_Dout               : std_logic_vector(107 downto 0);
+   signal writefifo_Rd                 : std_logic := '0';
+   signal writefifo_Empty              : std_logic;
+          
+   signal writefifo_rd_1x              : std_logic := '0';
+   signal writefifo_rd_93              : std_logic := '0';                  
+   signal writefifo_rd_93_1            : std_logic := '0';  
+          
    -- common   
    type t_memstate is
    (
       MEMSTATE_IDLE,
-      MEMSTATE_BUSY1,
-      MEMSTATE_BUSY4
+      MEMSTATE_BUSY
    );
    signal memstate : t_memstate := MEMSTATE_IDLE;                 
    
@@ -582,6 +592,16 @@ begin
    process (clk93)
    begin
       if (rising_edge(clk93)) then
+      
+         writefifo_wr <= '0';
+         writefifo_Rd <= '0';
+         
+         writefifo_rd_93   <= writefifo_rd_1x;
+         writefifo_rd_93_1 <= writefifo_rd_93;
+         if (writefifo_rd_93_1 = '0' and writefifo_rd_93 = '1') then
+            writefifo_Rd <= '1';
+         end if;
+      
          if (reset_93 = '1') then
          
             mem1_request_latched  <= '0';
@@ -593,6 +613,9 @@ begin
                mem1_request_latched <= '1';
                mem1_address_latched <= mem1_address;
                mem1_cache_latched   <= instrcache_request;
+               if (instrcache_request = '1') then
+                  mem1_address_latched <= mem1_address(31 downto 5) & "00000";
+               end if;
             end if;            
             
             if (mem4_request = '1' or datacache_request = '1') then
@@ -619,12 +642,25 @@ begin
                mem4_cache_latched   <= '0';
             end if;
             
-            if (mem_request = '1') then
-               if (memoryMuxStage4) then 
-                  mem4_request_latched <= '0';
-               else
-                  mem1_request_latched <= '0';
-               end if;
+            writefifo_Din( 63 downto  0) <= mem4_data_latched;
+            writefifo_Din(103 downto 96) <= mem4_mask_latched;
+            
+            if (mem4_request_latched = '1') then
+               mem4_request_latched         <= '0';
+               writefifo_wr                 <= '1';
+               writefifo_Din( 95 downto 64) <= std_logic_vector(mem4_address_latched);
+               writefifo_Din(104)           <= '1';
+               writefifo_Din(105)           <= mem4_rnw_latched;
+               writefifo_Din(106)           <= mem4_req64_latched;
+               writefifo_Din(107)           <= mem4_cache_latched;
+            elsif (mem1_request_latched = '1') then
+               mem1_request_latched         <= '0';
+               writefifo_wr                 <= '1';
+               writefifo_Din( 95 downto 64) <= std_logic_vector(mem1_address_latched);
+               writefifo_Din(104)           <= '0';
+               writefifo_Din(105)           <= '1';
+               writefifo_Din(106)           <= '0';
+               writefifo_Din(107)           <= mem1_cache_latched;
             end if;
             
             mem_finished_dataRead <= mem_dataRead;
@@ -648,72 +684,83 @@ begin
       end if;
    end process;
    
+   iSyncFifo: entity mem.SyncFifoFallThroughMLAB
+   generic map
+   (
+      SIZE             => 8,
+      DATAWIDTH        => 108, -- 64bit data, 32bit address, 8 bit byte enable, 1 bit stage1/4, 1 bit r/w, 1 bit 64bit access, 1 bit cache
+      NEARFULLDISTANCE => 4
+   )
+   port map
+   ( 
+      clk      => clk93,
+      reset    => reset_93,  
+      Din      => writefifo_Din,     
+      Wr       => writefifo_wr,      
+      Full     => open,    
+      NearFull => writefifo_nearfull,
+      Dout     => writefifo_Dout,    
+      Rd       => writefifo_Rd,      
+      Empty    => writefifo_Empty   
+   );
+   
    process (clk1x)
    begin
       if (rising_edge(clk1x)) then
+      
+         writefifo_rd_1x <= '0';
+         mem_request     <= '0';
+      
          if (reset_1x = '1') then
          
             memoryMuxStage4       <= '0'; 
-            mem_request           <= '0';
             memstate              <= MEMSTATE_IDLE;
          
          else
-         
-            mem_request <= '0';
             
             case (memstate) is
                when MEMSTATE_IDLE => 
                
                   if (ce_1x = '1') then
                   
-                     if (mem4_request_latched = '1') then
+                     if (writefifo_Empty = '0') then
                      
-                        memstate          <= MEMSTATE_BUSY4;
+                        writefifo_rd_1x   <= '1';
+                        memstate          <= MEMSTATE_BUSY;
                         mem_request       <= '1';
                         memoryMuxStage4   <= '1';
-                        mem_address       <= mem4_address_latched;
-                        mem_rnw           <= mem4_rnw_latched;
-                        mem_dataWrite     <= mem4_data_latched;
-                        mem_writeMask     <= mem4_mask_latched;
-                        mem_req64         <= mem4_req64_latched;
-                        if (mem4_cache_latched = '1') then
+                        mem_dataWrite     <= writefifo_Dout(63 downto 0);
+                        mem_address       <= unsigned(writefifo_Dout(95 downto 64));
+                        mem_writeMask     <= writefifo_Dout(103 downto 96);
+                        memoryMuxStage4   <= writefifo_Dout(104);
+                        mem_rnw           <= writefifo_Dout(105);
+                        mem_req64         <= writefifo_Dout(106);
+                        
+                        mem_size          <= "001";
+                        
+                        if (writefifo_Dout(104) = '1' and writefifo_Dout(107) = '1') then
                            mem_size          <= "010";
                            datacache_active  <= '1';
-                        else
-                           mem_size          <= "001";
                         end if;
-   
-                     elsif (mem1_request_latched = '1') then
-                     
-                        memstate          <= MEMSTATE_BUSY1;
-                        mem_request       <= '1';
-                        memoryMuxStage4   <= '0';
-                        mem_address       <= mem1_address_latched;
-                        mem_req64         <= '0';
-                        mem_rnw           <= '1';
-                        if (mem1_cache_latched = '1') then
+                        
+                        if (writefifo_Dout(104) = '0' and writefifo_Dout(107) = '1') then
                            mem_size          <= "100";
-                           mem_address(4 downto 0) <= (others => '0');
-                           instrcache_active <= '1';
-                        else
-                           mem_size          <= "001";
+                           instrcache_active  <= '1';
                         end if;
-                     
+
                      end if;
-                     
+
                   end if;
                   
-               when MEMSTATE_BUSY1 =>
+               when MEMSTATE_BUSY =>
                   if (mem_done = '1') then
                      memstate          <= MEMSTATE_IDLE;
-                     instrcache_active <= '0';
+                     if (memoryMuxStage4 = '1') then
+                        datacache_active <= '0';
+                     else
+                        instrcache_active <= '0';
+                     end if;
                   end if;               
-                  
-               when MEMSTATE_BUSY4 =>
-                  if (mem_done = '1') then
-                     memstate         <= MEMSTATE_IDLE;
-                     datacache_active <= '0';
-                  end if;
                   
             end case;
             
@@ -910,6 +957,7 @@ begin
       if (rising_edge(clk93)) then
       
          instrcache_fill <= '0';
+         mem1_request    <= '0';
          
          if (reset_93 = '1') then
                      
@@ -924,14 +972,9 @@ begin
             stall1         <= '1';
             fetchReady     <= '1';
             useCached_data <= '0';
-            
-                 
-
             opcode0        <= (others => '0'); --unsigned(ss_in(14));
          
          elsif (ce_93 = '1') then
-         
-            mem1_request    <= '0';
 
             if (stall = 0) then
                fetchReady <= '0';
@@ -2636,6 +2679,7 @@ begin
       reset_93          => reset_93,
       ce_93             => ce_93,
       stall             => stall,
+      stall1            => stall1,
       stall4            => stall4,
       
       slow_in           => DATACACHESLOW,

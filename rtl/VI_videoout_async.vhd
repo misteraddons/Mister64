@@ -143,7 +143,6 @@ begin
       end if;
    end process;
    
-   vpos <= vpos_half(9 downto 1);
    videoout_reports.VI_CURRENT <= vpos;
    
    pixelData_B  <= videoout_pixelRead( 7 downto  0);
@@ -236,6 +235,7 @@ begin
             if (hpos >= videoout_settings.VI_H_SYNC_LENGTH) then
                hpos               <= (others => '0');
                clkdiv             <= (others => '0');
+               vpos               <= vpos + 1; 
             else
                hpos <= hpos + 1;
             end if;
@@ -243,6 +243,7 @@ begin
             if (hpos = videoout_settings.VI_H_SYNC_LENGTH or hpos = videoout_settings.VI_H_SYNC_LENGTH(11 downto 1)) then
                if (vpos_half >= videoout_settings.VI_V_SYNC) then
                   vpos_half          <= (others => '0');
+                  vpos               <= (others => '0');
                   clkdiv             <= (others => '0');
                   v_start_last       <= videoout_settings.VI_V_VIDEO_START(9 downto 1);
                   if (videoout_settings.CTRL_SERRATE = '1') then 
