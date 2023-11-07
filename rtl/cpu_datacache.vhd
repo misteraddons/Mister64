@@ -14,8 +14,8 @@ entity cpu_datacache is
       reset_93          : in  std_logic;
       ce_93             : in  std_logic;
       stall             : in  unsigned(4 downto 0);
-      stall1            : in  std_logic;
       stall4            : in  std_logic;
+      fifo_block        : in  std_logic;
       
       slow_in           : in  std_logic_vector(3 downto 0); 
       force_wb_in       : in  std_logic;
@@ -32,7 +32,6 @@ entity cpu_datacache is
       writeback_ena     : out std_logic := '0';
       writeback_addr    : out unsigned(31 downto 0) := (others => '0');
       writeback_data    : out std_logic_vector(63 downto 0) := (others => '0');
-      writeback_done    : in  std_logic;
       
       tag_addr          : in  unsigned(28 downto 0);
       
@@ -436,7 +435,7 @@ begin
                   end if;
                   
                when WRITEBACK1ADDR =>
-                  if (stall1 = '0') then
+                  if (fifo_block = '0') then
                      state <= WRITEBACK1READ;
                   end if;
                
@@ -450,25 +449,21 @@ begin
                   writeback_data <= cache_q_b(31 downto 0) & cache_q_b(63 downto 32);
                
                when WRITEBACK2WRITE =>
-                  if (writeback_done = '1') then
-                     state             <= WRITEBACKDONE;
-                     writeback_ena     <= '1';
-                     writeback_data    <= cache_q_b(31 downto 0) & cache_q_b(63 downto 32);
-                     writeback_addr(3) <= '1';
-                  end if;
+                  state             <= WRITEBACKDONE;
+                  writeback_ena     <= '1';
+                  writeback_data    <= cache_q_b(31 downto 0) & cache_q_b(63 downto 32);
+                  writeback_addr(3) <= '1';
                
                when WRITEBACKDONE =>
-                  if (writeback_done = '1') then
-                     fillNext <= '0';
-                     if (fillNext = '1') then
-                        state       <= FILL;
-                        ram_request <= '1';
-                        ram_reqAddr <= fillAddr;
-                     else
-                        state             <= IDLE;
-                        CachecommandDone  <= isCommand;
-                        wb_done           <= isWB;
-                     end if;
+                  fillNext <= '0';
+                  if (fillNext = '1') then
+                     state       <= FILL;
+                     ram_request <= '1';
+                     ram_reqAddr <= fillAddr;
+                  else
+                     state             <= IDLE;
+                     CachecommandDone  <= isCommand;
+                     wb_done           <= isWB;
                   end if;
                   
                when COMMANDPROCESS =>

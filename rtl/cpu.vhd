@@ -28,6 +28,7 @@ entity cpu is
       error_stall           : out std_logic := '0';
       error_FPU             : out std_logic := '0';
       error_exception       : out std_logic := '0';
+      error_fifo            : out std_logic := '0';
       
       mem_request           : out std_logic := '0';
       mem_rnw               : out std_logic := '0'; 
@@ -96,31 +97,22 @@ architecture arch of cpu is
    signal memoryMuxStage4              : std_logic := '0';
    signal mem1_request_latched         : std_logic := '0';
    signal mem1_cache_latched           : std_logic := '0';
-   signal mem1_address_latched         : unsigned(31 downto 0) := (others => '0'); 
    
    signal mem_done_1                   : std_logic := '0';
    signal mem_finished_instr           : std_logic := '0';
    signal mem_finished_read            : std_logic := '0';
-   signal mem_finished_write           : std_logic := '0';
    signal mem_finished_dataRead        : std_logic_vector(63 downto 0);
-   signal mem4_request_latched         : std_logic := '0';
-   signal mem4_address_latched         : unsigned(31 downto 0) := (others => '0');
-   signal mem4_req64_latched           : std_logic := '0';
-   signal mem4_rnw_latched             : std_logic := '0';
-   signal mem4_data_latched            : std_logic_vector(63 downto 0) := (others => '0');  
-   signal mem4_mask_latched            : std_logic_vector(7 downto 0) := (others => '0');  
-   signal mem4_cache_latched           : std_logic := '0';
           
    signal writefifo_Din                : std_logic_vector(107 downto 0);
    signal writefifo_wr                 : std_logic := '0';
-   signal writefifo_nearfull           : std_logic;
    signal writefifo_Dout               : std_logic_vector(107 downto 0);
    signal writefifo_Rd                 : std_logic := '0';
    signal writefifo_Empty              : std_logic;
+   signal writefifo_block              : std_logic;
+   signal writefifo_cnt                : integer range 0 to 7;
           
    signal writefifo_rd_1x              : std_logic := '0';
-   signal writefifo_rd_93              : std_logic := '0';                  
-   signal writefifo_rd_93_1            : std_logic := '0';  
+   signal writefifo_rd_93              : std_logic := '0';
           
    -- common   
    type t_memstate is
@@ -500,6 +492,7 @@ architecture arch of cpu is
    signal writebackReadAddress         : unsigned(31 downto 0) := (others => '0');
    signal writebackReadLastData        : unsigned(63 downto 0) := (others => '0');
    signal writeback_COP1_ReadEnable    : std_logic := '0'; 
+   signal writeback_fifoStall          : std_logic := '0'; 
          
    -- wire     
    signal mem4_request                 : std_logic := '0';
@@ -593,87 +586,96 @@ begin
    begin
       if (rising_edge(clk93)) then
       
-         writefifo_wr <= '0';
-         writefifo_Rd <= '0';
+         writefifo_wr    <= '0';
+         writefifo_Rd    <= '0';
+         writefifo_rd_93 <= writefifo_rd_1x;
          
-         writefifo_rd_93   <= writefifo_rd_1x;
-         writefifo_rd_93_1 <= writefifo_rd_93;
-         if (writefifo_rd_93_1 = '0' and writefifo_rd_93 = '1') then
-            writefifo_Rd <= '1';
-         end if;
-      
          if (reset_93 = '1') then
          
             mem1_request_latched  <= '0';
-            mem4_request_latched  <= '0';
+            writefifo_cnt         <= 0;
          
          else
-            
-            if (mem1_request = '1' or instrcache_request = '1') then
-               mem1_request_latched <= '1';
-               mem1_address_latched <= mem1_address;
-               mem1_cache_latched   <= instrcache_request;
-               if (instrcache_request = '1') then
-                  mem1_address_latched <= mem1_address(31 downto 5) & "00000";
-               end if;
-            end if;            
-            
-            if (mem4_request = '1' or datacache_request = '1') then
-               mem4_request_latched <= '1';
-               mem4_address_latched <= mem4_address;
-               mem4_req64_latched   <= mem4_req64;
-               mem4_rnw_latched     <= mem4_rnw;
-               mem4_data_latched    <= mem4_dataWrite;
-               mem4_mask_latched    <= mem4_writeMask;
-               mem4_cache_latched   <= datacache_request;
-               if (datacache_request = '1') then
-                  mem4_address_latched <= datacache_reqAddr(31 downto 4) & "0000";
-                  mem4_rnw_latched     <= '1';
-               end if;
+         
+            if (writefifo_rd_93 = '0' and writefifo_rd_1x = '1') then
+               writefifo_Rd <= '1';
+            end if;
+         
+            if (writefifo_wr = '1' and writefifo_Rd = '0') then
+               writefifo_cnt <= writefifo_cnt + 1;
+            end if;
+            if (writefifo_Rd = '1' and writefifo_wr = '0') then
+               writefifo_cnt <= writefifo_cnt - 1;
             end if;
             
+            -- when stage 4 and stage 1 request at the same time, latch the stage 1 request and insert it into the fifo as soon as possible
+            if (datacache_wb_ena = '1' or mem4_request = '1' or datacache_request = '1') then
+               if (mem1_request = '1' or instrcache_request = '1') then
+                  mem1_request_latched <= '1';
+                  mem1_cache_latched   <= instrcache_request;
+               end if;            
+            end if;
+
+            -- only 1 action from stage 4 can be active at any time
             if (datacache_wb_ena = '1') then
-               mem4_request_latched <= '1';
-               mem4_address_latched <= datacache_wb_addr;
-               mem4_req64_latched   <= '1';
-               mem4_rnw_latched     <= '0';
-               mem4_data_latched    <= datacache_wb_data;
-               mem4_mask_latched    <= x"FF";
-               mem4_cache_latched   <= '0';
-            end if;
-            
-            writefifo_Din( 63 downto  0) <= mem4_data_latched;
-            writefifo_Din(103 downto 96) <= mem4_mask_latched;
-            
-            if (mem4_request_latched = '1') then
-               mem4_request_latched         <= '0';
                writefifo_wr                 <= '1';
-               writefifo_Din( 95 downto 64) <= std_logic_vector(mem4_address_latched);
+               writefifo_Din( 63 downto  0) <= datacache_wb_data;
+               writefifo_Din( 95 downto 64) <= std_logic_vector(datacache_wb_addr);
+               writefifo_Din(103 downto 96) <= x"FF";
                writefifo_Din(104)           <= '1';
-               writefifo_Din(105)           <= mem4_rnw_latched;
-               writefifo_Din(106)           <= mem4_req64_latched;
-               writefifo_Din(107)           <= mem4_cache_latched;
+               writefifo_Din(105)           <= '0';
+               writefifo_Din(106)           <= '1';
+               writefifo_Din(107)           <= '0';
+            elsif (mem4_request = '1' and mem4_rnw = '0') then
+               writefifo_wr                 <= '1';
+               writefifo_Din( 63 downto  0) <= mem4_dataWrite;
+               writefifo_Din( 95 downto 64) <= std_logic_vector(mem4_address);
+               writefifo_Din(103 downto 96) <= mem4_writeMask;
+               writefifo_Din(104)           <= '1';
+               writefifo_Din(105)           <= '0';
+               writefifo_Din(106)           <= mem4_req64;
+               writefifo_Din(107)           <= '0';
+            elsif (mem4_request = '1' or datacache_request = '1') then
+               writefifo_wr                 <= '1';
+               writefifo_Din( 95 downto 64) <= std_logic_vector(mem4_address);
+               writefifo_Din(104)           <= '1';
+               writefifo_Din(105)           <= '1';
+               writefifo_Din(106)           <= mem4_req64;
+               writefifo_Din(107)           <= datacache_request;
+               if (datacache_request = '1') then
+                  writefifo_Din( 95 downto 64) <= std_logic_vector(datacache_reqAddr(31 downto 4)) & "0000";
+               end if;
+            elsif (mem1_request = '1' or instrcache_request = '1') then
+               writefifo_wr                 <= '1';
+               writefifo_Din( 95 downto 64) <= std_logic_vector(mem1_address);
+               writefifo_Din(104)           <= '0';
+               writefifo_Din(105)           <= '1';
+               writefifo_Din(106)           <= '0';
+               writefifo_Din(107)           <= instrcache_request;
+               if (instrcache_request = '1') then
+                  writefifo_Din( 95 downto 64) <= std_logic_vector(mem1_address(31 downto 5)) & "00000";
+               end if;  
             elsif (mem1_request_latched = '1') then
                mem1_request_latched         <= '0';
                writefifo_wr                 <= '1';
-               writefifo_Din( 95 downto 64) <= std_logic_vector(mem1_address_latched);
+               writefifo_Din( 95 downto 64) <= std_logic_vector(mem1_address);
                writefifo_Din(104)           <= '0';
                writefifo_Din(105)           <= '1';
                writefifo_Din(106)           <= '0';
                writefifo_Din(107)           <= mem1_cache_latched;
+               if (mem1_cache_latched = '1') then
+                  writefifo_Din( 95 downto 64) <= std_logic_vector(mem1_address(31 downto 5)) & "00000";
+               end if;  
             end if;
             
             mem_finished_dataRead <= mem_dataRead;
             mem_finished_instr    <= '0';
             mem_finished_read     <= '0';
-            mem_finished_write    <= '0';
             mem_done_1            <= mem_done;
             if (mem_done = '1' and mem_done_1 = '0') then
                if (memoryMuxStage4 = '1') then
-                  if (mem4_rnw_latched = '1') then
+                  if (mem_rnw = '1') then
                      mem_finished_read <= '1';
-                  else
-                     mem_finished_write <= '1';
                   end if;
                else
                   mem_finished_instr <= '1';
@@ -687,22 +689,23 @@ begin
    iSyncFifo: entity mem.SyncFifoFallThroughMLAB
    generic map
    (
-      SIZE             => 8,
-      DATAWIDTH        => 108, -- 64bit data, 32bit address, 8 bit byte enable, 1 bit stage1/4, 1 bit r/w, 1 bit 64bit access, 1 bit cache
-      NEARFULLDISTANCE => 4
+      SIZE              => 8,
+      DATAWIDTH         => 108, -- 64bit data, 32bit address, 8 bit byte enable, 1 bit stage1/4, 1 bit r/w, 1 bit 64bit access, 1 bit cache
+      NEARFULLDISTANCE  => 4
    )
    port map
    ( 
-      clk      => clk93,
-      reset    => reset_93,  
-      Din      => writefifo_Din,     
-      Wr       => writefifo_wr,      
-      Full     => open,    
-      NearFull => writefifo_nearfull,
-      Dout     => writefifo_Dout,    
-      Rd       => writefifo_Rd,      
-      Empty    => writefifo_Empty   
+      clk       => clk93,
+      reset     => reset_93,  
+      Din       => writefifo_Din,     
+      Wr        => writefifo_wr,      
+      Full      => error_fifo,    
+      Dout      => writefifo_Dout,    
+      Rd        => writefifo_Rd,      
+      Empty     => writefifo_Empty
    );
+   
+   writefifo_block <= '1' when (writefifo_cnt >= 4 or (writefifo_cnt = 3 and writefifo_wr = '1')) else '0';
    
    process (clk1x)
    begin
@@ -2679,8 +2682,8 @@ begin
       reset_93          => reset_93,
       ce_93             => ce_93,
       stall             => stall,
-      stall1            => stall1,
       stall4            => stall4,
+      fifo_block        => writefifo_block,
       
       slow_in           => DATACACHESLOW,
       force_wb_in       => DATACACHEFORCEWEB,
@@ -2697,7 +2700,6 @@ begin
       writeback_ena     => datacache_wb_ena,  
       writeback_addr    => datacache_wb_addr, 
       writeback_data    => datacache_wb_data,
-      writeback_done    => mem_finished_write,
       
       tag_addr          => EXECacheAddr,
       
@@ -2768,7 +2770,9 @@ begin
             
             if (skipmem = '0') then
                mem4_request   <= '1';
-               stallNew4      <= '1';
+               if (writefifo_block = '1') then
+                  stallNew4      <= '1';
+               end if;
             end if;
             
             mem4_rnw       <= '0';
@@ -2866,7 +2870,15 @@ begin
                   writeback_COP1_ReadEnable    <= executeCOP1ReadEnable;
                   cop1_stage4_target           <= execute_COP1_Target;
                   
+                  writeback_fifoStall          <= '0';
+                  
                   if (executeMemWriteEnable = '1') then
+                  
+                     if (mem4_request = '1' and writefifo_block = '1') then
+                        writeback_fifoStall <= '1';
+                     else
+                        writebackNew        <= '1';
+                     end if;
                   
                   elsif (executeMemReadEnable = '1') then
                   
@@ -2920,7 +2932,13 @@ begin
                writebackNew  <= '1';
             end if;
             
-            if ((writeback_UseCache = '0' and mem_finished_write = '1') or datacache_writedone = '1') then
+            if (writeback_fifoStall = '1' and writefifo_cnt = 4 and writefifo_wr = '0') then
+               stall4              <= '0';
+               writebackNew        <= '1';
+               writeback_fifoStall <= '0';
+            end if;
+            
+            if (datacache_writedone = '1') then
                stall4        <= '0';
                writebackNew  <= '1';
             end if;

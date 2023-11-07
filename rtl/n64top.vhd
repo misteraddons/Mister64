@@ -36,6 +36,7 @@ entity n64top is
       
       CICTYPE                 : in  std_logic_vector(3 downto 0);
       RAMSIZE8                : in  std_logic;
+      FASTRAM                 : in  std_logic;
       DATACACHEON             : in  std_logic;
       DATACACHESLOW           : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB       : in  std_logic; 
@@ -211,6 +212,7 @@ architecture arch of n64top is
    signal errorRSP_PCON          : std_logic;
    signal error_vi               : std_logic;
    signal error_RDPMEMMUX        : std_logic;
+   signal errorCPU_fifo          : std_logic;
   
    -- irq
    signal irqRequest             : std_logic;
@@ -527,8 +529,9 @@ begin
    process (reset_intern_1x, errorRSP_PCON        ) begin if (errorRSP_PCON         = '1') then errorCode(23) <= '1'; elsif (reset_intern_1x = '1') then errorCode(23) <= '0'; end if; end process;
    process (reset_intern_1x, error_vi             ) begin if (error_vi              = '1') then errorCode(24) <= '1'; elsif (reset_intern_1x = '1') then errorCode(24) <= '0'; end if; end process;
    process (reset_intern_1x, error_RDPMEMMUX      ) begin if (error_RDPMEMMUX       = '1') then errorCode(25) <= '1'; elsif (reset_intern_1x = '1') then errorCode(25) <= '0'; end if; end process;
+   process (reset_intern_1x, errorCPU_fifo        ) begin if (errorCPU_fifo         = '1') then errorCode(26) <= '1'; elsif (reset_intern_1x = '1') then errorCode(26) <= '0'; end if; end process;
    
-   errorCode(27 downto 26) <= "00";
+   errorCode(27) <= '0';
    
    process (clk1x)
    begin
@@ -1276,7 +1279,8 @@ begin
       ce                   => ce_1x,   
       reset                => reset_intern_1x,
       
-      FASTBUS              => is_simu,
+      FASTBUS              => '0',
+      FASTRAM              => FASTRAM,
       
       error                => errorMEMMUX,
       
@@ -1399,6 +1403,7 @@ begin
       error_stall          => errorCPU_stall,
       error_FPU            => errorCPU_FPU,
       error_exception      => errorCPU_exception,
+      error_fifo           => errorCPU_fifo,
          
       mem_request          => mem_request,  
       mem_rnw              => mem_rnw,         

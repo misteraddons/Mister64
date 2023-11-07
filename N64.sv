@@ -425,6 +425,7 @@ parameter CONF_STR = {
    "P2O[77:75],Save Type,None,EEPROM4,EEPROM16,SRAM32,SRAM96,Flash;",
    
    "P3,Debug settings;",
+   "P3O[83],Fast RAM access,Off,On;",
    "P3O[43],Data Cache,On,Off;",
    "P3O[29],Data FORCE WB,Off,On;",
    "P3O[27:24],Cache Delay,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;",
@@ -777,6 +778,7 @@ n64top
    
    .CICTYPE(status[68:65]),
    .RAMSIZE8(~status[70]),
+   .FASTRAM(status[83]),
    .DATACACHEON(~status[43]),
    .DATACACHESLOW(status[27:24]),
    .DATACACHEFORCEWEB(status[29]),

@@ -123,6 +123,7 @@ begin
       
       CICTYPE               => "0000",
       RAMSIZE8              => '1',
+      FASTRAM               => '0',
       DATACACHEON           => '1',
       DATACACHESLOW         => "0000",
       DATACACHEFORCEWEB     => '0',
@@ -285,7 +286,7 @@ begin
    iframebuffer : entity work.framebuffer
    port map
    (
-      clk               => clk1x,     
+      clk               => clkvid,     
       hblank            => hblank,  
       vblank            => vblank,  
       video_ce          => video_ce,

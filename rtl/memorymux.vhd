@@ -13,6 +13,7 @@ entity memorymux is
       reset                : in  std_logic;
       
       FASTBUS              : in  std_logic;
+      FASTRAM              : in  std_logic;
       
       error                : out std_logic;
      
@@ -313,6 +314,12 @@ begin
                      if (mem_address(28 downto 0) < 16#03F00000#) then -- RAM
                         state           <= WAITRAM;
                         rdram_request   <= '1';
+                        if (mem_rnw = '1') then
+                           bus_slow <= 15;
+                        else
+                           bus_slow <= 6;
+                        end if;                     
+                        
                          
                      elsif (mem_address(28 downto 0) >= 16#03F00000# and mem_address(28 downto 0) < 16#04000000#) then -- RDRAM Regs
                         state    <= WAITBUS; 
@@ -458,8 +465,12 @@ begin
                   
                when WAITRAM =>
                   if (rdram_done = '1') then
-                     state        <= IDLE;
-                     mem_done     <= '1';
+                     if (bus_slow = 0 or FASTRAM = '1') then
+                        mem_done <= '1';
+                        state    <= IDLE;
+                     else
+                        state    <= WAITSLOW;
+                     end if;
                      case (last_addr(2 downto 0)) is
                         when "000" => mem_dataRead <= rdram_dataRead;
                         when "001" => mem_dataRead(7 downto 0)  <= rdram_dataRead(15 downto 8);
