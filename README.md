@@ -42,6 +42,7 @@ List of Errors:
 - Bit 23 - RSP PC is modified by register access while RSP runs
 - Bit 24 - VI line processing wasn't able to complete in time
 - Bit 25 - RDP Mux missed request
+- Bit 26 - CPU Writefifo full (should never happen, internal CPU logic bug)
   
 ## Status
 
