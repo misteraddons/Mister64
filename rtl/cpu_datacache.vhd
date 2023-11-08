@@ -455,15 +455,17 @@ begin
                   writeback_addr(3) <= '1';
                
                when WRITEBACKDONE =>
-                  fillNext <= '0';
-                  if (fillNext = '1') then
-                     state       <= FILL;
-                     ram_request <= '1';
-                     ram_reqAddr <= fillAddr;
-                  else
-                     state             <= IDLE;
-                     CachecommandDone  <= isCommand;
-                     wb_done           <= isWB;
+                  if (fifo_block = '0') then
+                     fillNext <= '0';
+                     if (fillNext = '1') then
+                        state       <= FILL;
+                        ram_request <= '1';
+                        ram_reqAddr <= fillAddr;
+                     else
+                        state             <= IDLE;
+                        CachecommandDone  <= isCommand;
+                        wb_done           <= isWB;
+                     end if;
                   end if;
                   
                when COMMANDPROCESS =>
