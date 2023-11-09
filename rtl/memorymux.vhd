@@ -129,7 +129,6 @@ architecture arch of memorymux is
    signal dataFromBusses : std_logic_vector(31 downto 0);
    signal bus_done       : std_logic;
    
-   signal last_rnw       : std_logic;
    signal last_addr      : unsigned(31 downto 0); 
    
    signal bus_slow       : integer range 0 to 4095;
@@ -291,7 +290,6 @@ begin
             case (state) is
                when IDLE =>
                
-                  last_rnw  <= mem_rnw;
                   last_addr <= mem_address;
                   
                   rdram_rnw       <= mem_rnw;

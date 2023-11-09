@@ -53,7 +53,7 @@ architecture arch of AI is
    signal AI_LEN              : unsigned(17 downto 0) := (others => '0'); -- 0x04500004 (RW) : [14:0] transfer length(v1.0) - Bottom 3 bits are ignored [17:0] transfer length(v2.0) - Bottom 3 bits are ignored
    signal AI_CONTROL_DMAON    : std_logic := '0';                         -- 0x04500008 (W): [0] DMA enable - if LSB == 1, DMA is enabled
    signal AI_DACRATE          : unsigned(13 downto 0) := (others => '0'); -- 0x04500010 (W): [13:0] dac rate      -vid_clock / (dperiod + 1) is the DAC sample rate      -(dperiod + 1) >= 66 * (aclockhp + 1) must be true
-   signal AI_BITRATE          : unsigned(3 downto 0)  := (others => '0'); -- 0x04500014 (W): [3:0] bit rate (abus clock half period register - aclockhp)   -vid_clock / (2 * (aclockhp + 1)) is the DAC clock rate    -The abus clock stops if aclockhp is zero
+   --signal AI_BITRATE          : unsigned(3 downto 0)  := (others => '0'); -- 0x04500014 (W): [3:0] bit rate (abus clock half period register - aclockhp)   -vid_clock / (2 * (aclockhp + 1)) is the DAC clock rate    -The abus clock stops if aclockhp is zero
    
    signal AI_DRAM_ADDR_next   : unsigned(23 downto 0) := (others => '0');
    signal AI_LEN_next         : unsigned(17 downto 0) := (others => '0');
@@ -85,7 +85,6 @@ architecture arch of AI is
          
    signal fifo_Din            : std_logic_vector(31 downto 0);
    signal fifo_wr             : std_logic := '0';
-   signal error_Fifo          : std_logic;
    signal fifo_nearfull       : std_logic;
    signal fifo_Dout           : std_logic_vector(31 downto 0);
    signal fifo_Rd             : std_logic := '0';
@@ -123,7 +122,7 @@ begin
             AI_LEN               <= unsigned(ss_in(0)(41 downto 27)) & "000"; -- (others => '0');
             AI_CONTROL_DMAON     <= ss_in(1)(42);                     -- '0';
             AI_DACRATE           <= unsigned(ss_in(0)(55 downto 42)); -- (others => '1');
-            AI_BITRATE           <= unsigned(ss_in(0)(59 downto 56)); -- (others => '0');
+            --AI_BITRATE           <= unsigned(ss_in(0)(59 downto 56)); -- (others => '0');
                
             AI_DRAM_ADDR_next    <= unsigned(ss_in(1)(23 downto 0)); -- (others => '0');
             AI_LEN_next          <= unsigned(ss_in(1)(41 downto 27)) & "000"; -- (others => '0');
@@ -192,7 +191,7 @@ begin
                         when x"00008" => AI_CONTROL_DMAON <= bus_dataWrite(0);
                         when x"0000C" => irq_out <= '0';
                         when x"00010" => AI_DACRATE <= unsigned(bus_dataWrite(13 downto 0));
-                        when x"00014" => AI_BITRATE <= unsigned(bus_dataWrite(3 downto 0));
+                        --when x"00014" => AI_BITRATE <= unsigned(bus_dataWrite(3 downto 0));
                         
                         when others   => null;                  
                      end case;
@@ -313,7 +312,7 @@ begin
       reset    => '0',  
       Din      => fifo_Din,     
       Wr       => fifo_wr,      
-      Full     => error_Fifo,    
+      Full     => open,    
       NearFull => fifo_nearfull,
       Dout     => fifo_Dout,    
       Rd       => fifo_Rd,      

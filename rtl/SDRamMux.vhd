@@ -74,13 +74,11 @@ entity SDRamMux is
       sdramMux_done        : out tSDRAMSingle;
       sdramMux_dataRead    : out std_logic_vector(31 downto 0);
       
-      rdp9fifo_reset       : in  std_logic; 
       rdp9fifo_Din         : in  std_logic_vector(53 downto 0); -- 32bit data + 18 bit address + 4bit byte enable
       rdp9fifo_Wr          : in  std_logic;  
       rdp9fifo_nearfull    : out std_logic;  
       rdp9fifo_empty       : out std_logic;        
       
-      rdp9fifoZ_reset      : in  std_logic; 
       rdp9fifoZ_Din        : in  std_logic_vector(49 downto 0); -- 32bit data + 18 bit address
       rdp9fifoZ_Wr         : in  std_logic;  
       rdp9fifoZ_nearfull   : out std_logic;  
@@ -284,7 +282,7 @@ begin
    port map
    ( 
       clk      => clk1x,
-      reset    => rdp9fifo_reset,  
+      reset    => '0',  
       Din      => rdp9fifo_Din,     
       Wr       => rdp9fifo_Wr,
       Full     => open,    
@@ -304,7 +302,7 @@ begin
    port map
    ( 
       clk      => clk1x,
-      reset    => rdp9fifoZ_reset,  
+      reset    => '0',  
       Din      => rdp9fifoZ_Din,     
       Wr       => rdp9fifoZ_Wr,
       Full     => open,    

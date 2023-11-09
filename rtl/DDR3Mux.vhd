@@ -87,13 +87,11 @@ entity DDR3Mux is
       rspfifo_nearfull : out std_logic;  
       rspfifo_empty    : out std_logic;
       
-      rdpfifo_reset    : in  std_logic; 
       rdpfifo_Din      : in  std_logic_vector(91 downto 0); -- 64bit data + 20 bit address + 8 byte enables
       rdpfifo_Wr       : in  std_logic;  
       rdpfifo_nearfull : out std_logic;  
       rdpfifo_empty    : out std_logic;
       
-      rdpfifoZ_reset   : in  std_logic; 
       rdpfifoZ_Din     : in  std_logic_vector(91 downto 0); -- 64bit data + 20 bit address + 8 byte enables
       rdpfifoZ_Wr      : in  std_logic;  
       rdpfifoZ_nearfull: out std_logic;  
@@ -403,7 +401,7 @@ begin
    port map
    ( 
       clk      => clk2x,
-      reset    => rdpfifo_reset,  
+      reset    => '0',  
       Din      => rdpfifo_Din,     
       Wr       => (rdpfifo_Wr and clk2xIndex),
       Full     => open,    
@@ -423,7 +421,7 @@ begin
    port map
    ( 
       clk      => clk2x,
-      reset    => rdpfifoZ_reset,  
+      reset    => '0',  
       Din      => rdpfifoZ_Din,     
       Wr       => (rdpfifoZ_Wr and clk2xIndex),
       Full     => open,    

@@ -17,7 +17,6 @@ entity RDP_command is
       cmdfifo_wr              : in  std_logic := '0';
       cmdfifo_nearfull        : out std_logic := '0';
                
-      commandIsIdle           : out std_logic;
       commandReqData          : out std_logic;
                
       poly_done               : in  std_logic;
@@ -119,8 +118,6 @@ begin
                  not cmdfifo_Empty when (state = EVALTEXTURE) else
                  not cmdfifo_Empty when (state = EVALZBUFFER) else
                  '0';
-                 
-   commandIsIdle  <= '1' when (state = IDLE) else '0';
    
    commandReqData <= cmdfifo_Empty when (state = IDLE) else 
                      cmdfifo_Empty when (state = EVALCOMMAND) else 

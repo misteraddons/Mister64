@@ -120,7 +120,7 @@ architecture arch of savestates is
    
    signal unstallwait         : integer range 0 to 67108863 := 0;
    
-   signal SS_DataRead         : std_logic_vector(63 downto 0);
+   --signal SS_DataRead         : std_logic_vector(63 downto 0);
    signal RAMAddrNext         : unsigned(20 downto 0) := (others => '0');
    
    signal header_amount       : unsigned(31 downto 0) := to_unsigned(1, 32);
@@ -135,6 +135,8 @@ architecture arch of savestates is
    signal rdram_address_safe  : unsigned(27 downto 0):= (others => '0');
 
 begin 
+
+   saving_savestate <= '0';
 
    savestate_busy <= '0' when state = IDLE else '1';
 
@@ -167,24 +169,24 @@ begin
          SS_wren <= (others => '0');
          SS_rden <= (others => '0');
 
-         case (savetype_counter) is
-            when  0 => SS_DataRead <= SS_DataRead_CPU;
-            --when  1 => SS_DataRead <= SS_DataRead_GPU;
-            --when  2 => SS_DataRead <= SS_DataRead_GPUTiming;
-            --when  3 => SS_DataRead <= SS_DataRead_DMA;
-            --when  4 => SS_DataRead <= SS_DataRead_GTE;
-            --when  5 => SS_DataRead <= SS_DataRead_JOYPAD;
-            --when  6 => SS_DataRead <= SS_DataRead_MDEC;
-            --when  7 => SS_DataRead <= SS_DataRead_MEMORY;
-            --when  8 => SS_DataRead <= SS_DataRead_TIMER;
-            --when  9 => SS_DataRead <= SS_DataRead_SOUND;
-            --when 10 => SS_DataRead <= SS_DataRead_IRQ;
-            --when 11 => SS_DataRead <= SS_DataRead_SIO;
-            --when 12 => SS_DataRead <= SS_DataRead_SCP;
-            --when 13 => SS_DataRead <= SS_DataRead_CD;
-            --when 16 => SS_DataRead <= ram_data;
-            when others => SS_DataRead <= (others => '0');
-         end case;
+         --case (savetype_counter) is
+         --   when  0 => SS_DataRead <= SS_DataRead_CPU;
+         --   --when  1 => SS_DataRead <= SS_DataRead_GPU;
+         --   --when  2 => SS_DataRead <= SS_DataRead_GPUTiming;
+         --   --when  3 => SS_DataRead <= SS_DataRead_DMA;
+         --   --when  4 => SS_DataRead <= SS_DataRead_GTE;
+         --   --when  5 => SS_DataRead <= SS_DataRead_JOYPAD;
+         --   --when  6 => SS_DataRead <= SS_DataRead_MDEC;
+         --   --when  7 => SS_DataRead <= SS_DataRead_MEMORY;
+         --   --when  8 => SS_DataRead <= SS_DataRead_TIMER;
+         --   --when  9 => SS_DataRead <= SS_DataRead_SOUND;
+         --   --when 10 => SS_DataRead <= SS_DataRead_IRQ;
+         --   --when 11 => SS_DataRead <= SS_DataRead_SIO;
+         --   --when 12 => SS_DataRead <= SS_DataRead_SCP;
+         --   --when 13 => SS_DataRead <= SS_DataRead_CD;
+         --   --when 16 => SS_DataRead <= ram_data;
+         --   when others => SS_DataRead <= (others => '0');
+         --end case;
          
          case state is
          

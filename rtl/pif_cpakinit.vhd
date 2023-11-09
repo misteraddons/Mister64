@@ -145,6 +145,8 @@ architecture arch of pif_cpakinit is
       x"00000000",
       x"00000000"
    );
+   attribute ramstyle : string;
+   attribute ramstyle of rom : signal is "M10K";
 
 begin
 

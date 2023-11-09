@@ -236,14 +236,12 @@ architecture arch of n64top is
    signal rspfifo_Wr             : std_logic;  
    signal rspfifo_nearfull       : std_logic;    
    signal rspfifo_empty          : std_logic;    
-   
-   signal rdpfifo_reset          : std_logic; 
+
    signal rdpfifo_Din            : std_logic_vector(91 downto 0);
    signal rdpfifo_Wr             : std_logic;  
    signal rdpfifo_nearfull       : std_logic;    
    signal rdpfifo_empty          : std_logic;    
    
-   signal rdpfifoZ_reset         : std_logic; 
    signal rdpfifoZ_Din           : std_logic_vector(91 downto 0);
    signal rdpfifoZ_Wr            : std_logic;  
    signal rdpfifoZ_nearfull      : std_logic;    
@@ -261,13 +259,11 @@ architecture arch of n64top is
    signal sdramMux_done          : tSDRAMSingle;
    signal sdramMux_dataRead      : std_logic_vector(31 downto 0);
    
-   signal rdp9fifo_reset         : std_logic; 
    signal rdp9fifo_Din           : std_logic_vector(53 downto 0);
    signal rdp9fifo_Wr            : std_logic;  
    signal rdp9fifo_nearfull      : std_logic;  
    signal rdp9fifo_empty         : std_logic;
-   
-   signal rdp9fifoZ_reset        : std_logic; 
+    
    signal rdp9fifoZ_Din          : std_logic_vector(49 downto 0);
    signal rdp9fifoZ_Wr           : std_logic;  
    signal rdp9fifoZ_nearfull     : std_logic;  
@@ -426,17 +422,17 @@ architecture arch of n64top is
    signal SS_Adr                 : unsigned(11 downto 0);
    signal SS_wren                : std_logic_vector(13 downto 0);
    signal SS_rden                : std_logic_vector(13 downto 0);
-   signal SS_DataRead_AI         : std_logic_vector(63 downto 0);
-   signal SS_DataRead_RDP        : std_logic_vector(63 downto 0);
-   signal SS_DataRead_RSP        : std_logic_vector(63 downto 0);
-   signal SS_DataRead_MI         : std_logic_vector(63 downto 0);
-   signal SS_DataRead_PI         : std_logic_vector(63 downto 0);
-   signal SS_DataRead_PIF        : std_logic_vector(63 downto 0);
-   signal SS_DataRead_VI         : std_logic_vector(63 downto 0);
-   signal SS_DataRead_CPU        : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_AI         : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_RDP        : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_RSP        : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_MI         : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_PI         : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_PIF        : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_VI         : std_logic_vector(63 downto 0);
+   --signal SS_DataRead_CPU        : std_logic_vector(63 downto 0);
    
    signal SS_Idle                : std_logic;  
-   signal SS_idle_cpu            : std_logic;
+   --signal SS_idle_cpu            : std_logic;
    
    signal savestate_pause        : std_logic;
    signal loading_savestate      : std_logic;
@@ -612,7 +608,7 @@ begin
       SS_rden_IMEM         => SS_rden(12),
       SS_wren_DMEM         => SS_wren(11),
       SS_rden_DMEM         => SS_rden(11),
-      SS_DataRead          => SS_DataRead_RSP,
+      SS_DataRead          => open, --SS_DataRead_RSP,
       SS_idle              => open
    );
    
@@ -663,13 +659,11 @@ begin
       ddr3_DOUT            => ddr3_DOUT,       
       ddr3_DOUT_READY      => ddr3_DOUT_READY, 
       
-      fifoout_reset        => rdpfifo_reset,   
       fifoout_Din          => rdpfifo_Din,     
       fifoout_Wr           => rdpfifo_Wr,      
       fifoout_nearfull     => rdpfifo_nearfull,
       fifoout_empty        => rdpfifo_empty,      
       
-      fifooutZ_reset       => rdpfifoZ_reset,   
       fifooutZ_Din         => rdpfifoZ_Din,     
       fifooutZ_Wr          => rdpfifoZ_Wr,      
       fifooutZ_nearfull    => rdpfifoZ_nearfull,
@@ -686,13 +680,11 @@ begin
       sdram_dataRead       => sdram_dataRead,
       sdram_valid          => (sdram_done and sdram_rnw),    
                               
-      rdp9fifo_reset       => rdp9fifo_reset,   
       rdp9fifo_Din         => rdp9fifo_Din,     
       rdp9fifo_Wr          => rdp9fifo_Wr,      
       rdp9fifo_nearfull    => rdp9fifo_nearfull,
       rdp9fifo_empty       => rdp9fifo_empty,      
       
-      rdp9fifoZ_reset      => rdp9fifoZ_reset,   
       rdp9fifoZ_Din        => rdp9fifoZ_Din,     
       rdp9fifoZ_Wr         => rdp9fifoZ_Wr,      
       rdp9fifoZ_nearfull   => rdp9fifoZ_nearfull,
@@ -716,7 +708,7 @@ begin
       SS_Adr               => SS_Adr(0 downto 0),
       SS_wren              => SS_wren(4),
       SS_rden              => SS_rden(4),
-      SS_DataRead          => SS_DataRead_RDP
+      SS_DataRead          => open --SS_DataRead_RDP
    );
    
    iRDRAMRegs : entity work.RDRAMRegs
@@ -755,7 +747,7 @@ begin
       SS_DataWrite         => SS_DataWrite,
       SS_wren              => SS_wren(1),
       SS_rden              => SS_rden(1),
-      SS_DataRead          => SS_DataRead_MI
+      SS_DataRead          => open --SS_DataRead_MI
    );    
    
    iVI : entity work.VI
@@ -831,7 +823,7 @@ begin
       SS_Adr               => SS_Adr(2 downto 0),
       SS_wren              => SS_wren(9),
       SS_rden              => SS_rden(9),
-      SS_DataRead          => SS_DataRead_VI
+      SS_DataRead          => open --SS_DataRead_VI
    );   
    
    iAI : entity work.AI
@@ -868,7 +860,7 @@ begin
       SS_Adr               => SS_Adr(1 downto 0),   
       SS_wren              => SS_wren(0),     
       SS_rden              => SS_rden(0),            
-      SS_DataRead          => SS_DataRead_AI      
+      SS_DataRead          => open --SS_DataRead_AI      
    );   
    
    iRI : entity work.RI
@@ -978,7 +970,7 @@ begin
       SS_Adr               => SS_Adr(2 downto 0),
       SS_wren              => SS_wren(2),
       SS_rden              => SS_rden(2),
-      SS_DataRead          => SS_DataRead_PI
+      SS_DataRead          => open --SS_DataRead_PI
    );
    
    process(clk1x)
@@ -1091,7 +1083,7 @@ begin
       SS_Adr               => SS_Adr(6 downto 0),   
       SS_wren              => SS_wren(3),     
       SS_rden              => SS_rden(3),            
-      SS_DataRead          => SS_DataRead_PIF
+      SS_DataRead          => open --SS_DataRead_PIF
    );
    
    iGamepad : entity work.Gamepad
@@ -1210,13 +1202,11 @@ begin
       rspfifo_nearfull => rspfifo_nearfull,
       rspfifo_empty    => rspfifo_empty,
       
-      rdpfifo_reset    => rdpfifo_reset,   
       rdpfifo_Din      => rdpfifo_Din,     
       rdpfifo_Wr       => rdpfifo_Wr,      
       rdpfifo_nearfull => rdpfifo_nearfull,
       rdpfifo_empty    => rdpfifo_empty,      
       
-      rdpfifoZ_reset   => rdpfifoZ_reset,   
       rdpfifoZ_Din     => rdpfifoZ_Din,     
       rdpfifoZ_Wr      => rdpfifoZ_Wr,      
       rdpfifoZ_nearfull=> rdpfifoZ_nearfull,
@@ -1258,14 +1248,12 @@ begin
       sdramMux_granted     => sdramMux_granted,   
       sdramMux_done        => sdramMux_done,      
       sdramMux_dataRead    => sdramMux_dataRead,
-      
-      rdp9fifo_reset       => rdp9fifo_reset,   
+ 
       rdp9fifo_Din         => rdp9fifo_Din,     
       rdp9fifo_Wr          => rdp9fifo_Wr,      
       rdp9fifo_nearfull    => rdp9fifo_nearfull,
       rdp9fifo_empty       => rdp9fifo_empty,
-      
-      rdp9fifoZ_reset      => rdp9fifoZ_reset,   
+
       rdp9fifoZ_Din        => rdp9fifoZ_Din,     
       rdp9fifoZ_Wr         => rdp9fifoZ_Wr,      
       rdp9fifoZ_nearfull   => rdp9fifoZ_nearfull,
@@ -1433,8 +1421,8 @@ begin
       SS_Adr               => SS_Adr(11 downto 0),   
       SS_wren_CPU          => SS_wren(10),     
       SS_rden_CPU          => SS_rden(10),            
-      SS_DataRead_CPU      => SS_DataRead_CPU,
-      SS_idle              => SS_idle_cpu
+      SS_DataRead_CPU      => open, --SS_DataRead_CPU,
+      SS_idle              => open --SS_idle_cpu
    );
    
    SS_idle <= '1';

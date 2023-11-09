@@ -76,6 +76,8 @@ entity RDP_pipeline is
       pipeInSTWZ              : in  tcolor4_s32;
       
       export_pipeDone         : out std_logic := '0';       
+      export_writePixelX      : out unsigned(11 downto 0) := (others => '0');
+      export_writePixelY      : out unsigned(11 downto 0) := (others => '0');
       export_pipeO            : out rdp_export_type := (others => (others => '0'));
       export_Color            : out rdp_export_type := (others => (others => '0'));
       export_RGBA             : out rdp_export_type := (others => (others => '0'));
@@ -110,8 +112,6 @@ entity RDP_pipeline is
       
       writePixel              : out std_logic := '0';
       writePixelAddr          : out unsigned(25 downto 0);
-      writePixelX             : out unsigned(11 downto 0) := (others => '0');
-      writePixelY             : out unsigned(11 downto 0) := (others => '0');
       writePixelColorOut      : out tcolor3_u8 := (others => (others => '0'));
       writePixelCvg           : out unsigned(2 downto 0);
       writePixelFBData9       : out unsigned(31 downto 0);
@@ -847,8 +847,6 @@ begin
             
             writePixel        <= stage_valid(STAGE_OUTPUT - 1) and zUsePixel and (not settings_otherModes.cycleType(1));
             writePixelAddr    <= stage_addr(STAGE_OUTPUT - 1);
-            writePixelX       <= stage_x(STAGE_OUTPUT - 1);
-            writePixelY       <= stage_y(STAGE_OUTPUT - 1);
             for i in 0 to 2 loop
                if (blend_divEna = '1') then
                   writePixelColor(i) <= blenddiv(i)(24 downto 17);
@@ -895,6 +893,9 @@ begin
             if (settings_otherModes.cycleType(1) = '0') then
                export_pipeDone <= stage_valid(STAGE_OUTPUT - 1); 
             end if;
+            
+            export_writePixelX      <= stage_x(STAGE_OUTPUT - 1);
+            export_writePixelY      <= stage_y(STAGE_OUTPUT - 1);
             
             export_pipeO.addr       <= resize(stage_offX(STAGE_OUTPUT - 1), 32);
             export_pipeO.data       <= resize(stage_offY(STAGE_OUTPUT - 1), 64);

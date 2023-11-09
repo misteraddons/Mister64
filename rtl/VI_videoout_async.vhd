@@ -40,6 +40,9 @@ end entity;
 
 architecture arch of vi_videoout_async is
 
+   constant OFFSET_Y : integer := 1;
+   constant OFFSET_X : integer := 6;
+
    -- clk1x -> clkvid
    signal videoout_settings_s2   : tvideoout_settings;
    signal videoout_settings_s1   : tvideoout_settings;
@@ -65,6 +68,11 @@ architecture arch of vi_videoout_async is
    signal videoout_request       : tvideoout_request := ('0', '0', (others => '0'), 0, (others => '0'));
    
    -- settings
+   signal VIDEO_V_START          : unsigned(8 downto 0);
+   signal VIDEO_V_END            : unsigned(8 downto 0);
+   signal VIDEO_H_START          : unsigned(9 downto 0);
+   signal VIDEO_H_END            : unsigned(9 downto 0);
+   
    signal vpos_min               : integer range 0 to 511;
    signal vpos_max               : integer range 0 to 511;   
                   
@@ -149,30 +157,35 @@ begin
    pixelData_G  <= videoout_pixelRead(15 downto  8);
    pixelData_R  <= videoout_pixelRead(23 downto 16);
    
-   vpos_min <= to_integer(videoout_settings.VI_V_VIDEO_START(9 downto 1)) when (videoout_settings.fixedBlanks = '0') else
-               22 when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "00") else
-               30 when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "01") else
-               34 when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "10") else
-               17 when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "00") else
-               25 when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "01") else
-               29;-- when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "10")
+   VIDEO_V_START <= videoout_settings.VI_V_VIDEO_START(9 downto 1) + OFFSET_Y;
+   VIDEO_V_END   <= videoout_settings.VI_V_VIDEO_END(9 downto 1) + OFFSET_Y;
+   VIDEO_H_START <= videoout_settings.VI_H_VIDEO_START + OFFSET_X;
+   VIDEO_H_END   <= videoout_settings.VI_H_VIDEO_END + OFFSET_X;
+   
+   vpos_min <= to_integer(VIDEO_V_START) when (videoout_settings.fixedBlanks = '0') else
+               22 + OFFSET_Y when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "00") else
+               30 + OFFSET_Y when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "01") else
+               34 + OFFSET_Y when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "10") else
+               17 + OFFSET_Y when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "00") else
+               25 + OFFSET_Y when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "01") else
+               29 + OFFSET_Y;-- when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "10")
                
-   vpos_max <= to_integer(videoout_settings.VI_V_VIDEO_END(9 downto 1)) when (videoout_settings.fixedBlanks = '0') else
-               310 when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "00") else
-               302 when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "01") else
-               298 when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "10") else
-               257 when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "00") else
-               249 when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "01") else
-               245;-- when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "10")
+   vpos_max <= to_integer(VIDEO_V_END) when (videoout_settings.fixedBlanks = '0') else
+               310 + OFFSET_Y when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "00") else
+               302 + OFFSET_Y when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "01") else
+               298 + OFFSET_Y when (videoout_settings.isPAL = '1' and videoout_settings.CROPVERTICAL = "10") else
+               257 + OFFSET_Y when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "00") else
+               249 + OFFSET_Y when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "01") else
+               245 + OFFSET_Y;-- when (videoout_settings.isPAL = '0' and videoout_settings.CROPVERTICAL = "10")
                
 
-   hpos_min <= to_integer(videoout_settings.VI_H_VIDEO_START) when (videoout_settings.fixedBlanks = '0') else
-               128 when (videoout_settings.isPAL = '1') else
-               108;
+   hpos_min <= to_integer(VIDEO_H_START) when (videoout_settings.fixedBlanks = '0') else
+               128 + OFFSET_X when (videoout_settings.isPAL = '1') else
+               108 + OFFSET_X;
                
-   hpos_max <= to_integer(videoout_settings.VI_H_VIDEO_END) when (videoout_settings.fixedBlanks = '0') else
-                     768 when (videoout_settings.isPAL = '1') else
-                     748;
+   hpos_max <= to_integer(VIDEO_H_END) when (videoout_settings.fixedBlanks = '0') else
+               768 + OFFSET_X when (videoout_settings.isPAL = '1') else
+               748 + OFFSET_X;
 
    process (clkvid)
    begin
@@ -259,7 +272,7 @@ begin
            
             -- request
             if (hpos = 0) then
-               if (vpos <= videoout_settings.VI_V_VIDEO_START(9 downto 1)) then
+               if (vpos <= VIDEO_V_START) then
                   lineIn <= (others => '0');
                else
                   lineIn <= lineIn + 1;
@@ -270,11 +283,11 @@ begin
 
                videoout_reports.newLine <= '1';
 
-               if (vpos = videoout_settings.VI_V_VIDEO_START(9 downto 1) - 3) then
+               if (vpos = VIDEO_V_START - 3) then
                   videoout_request.newFrame   <= '1'; 
                end if;
             
-               if (vpos >= videoout_settings.VI_V_VIDEO_START(9 downto 1) and vpos < videoout_settings.VI_V_VIDEO_END(9 downto 1)) then
+               if (vpos >= VIDEO_V_START and vpos < VIDEO_V_END) then
                   videoout_request.fetch <= '1';
                end if;
                
@@ -284,11 +297,12 @@ begin
             if (clkdiv = 3) then
                videoout_out.ce <= '1';
                
-               if (hpos(11 downto 2) >= videoout_settings.VI_H_VIDEO_START) then
+               if (hpos(11 downto 2) >= VIDEO_H_START) then
                   videoout_readAddr     <= videoout_readAddr + 1;
                end if;
                
-               if ((videoout_settings.isPAL = '1' and hpos(11 downto 2) >= 128) or (videoout_settings.isPAL = '0' and hpos(11 downto 2) >= 108)) then
+               if ((videoout_settings.isPAL = '1' and hpos(11 downto 2) >= (128 + OFFSET_X)) or 
+                   (videoout_settings.isPAL = '0' and hpos(11 downto 2) >= (108 + OFFSET_X))) then
                   overlay_xpos <= overlay_xpos + 1;
                end if;
             
@@ -297,8 +311,8 @@ begin
                   videoout_out.g      <= overlay_data(15 downto 8);
                   videoout_out.b      <= overlay_data(23 downto 16);
                elsif (videoout_settings.CTRL_TYPE(1) = '0' or 
-                      hpos(11 downto 2) < videoout_settings.VI_H_VIDEO_START or hpos(11 downto 2) >= videoout_settings.VI_H_VIDEO_END or 
-                      vpos < videoout_settings.VI_V_VIDEO_START(9 downto 1) or vpos >= videoout_settings.VI_V_VIDEO_END(9 downto 1)) then
+                      hpos(11 downto 2) < VIDEO_H_START or hpos(11 downto 2) >= VIDEO_H_END or 
+                      vpos < VIDEO_V_START or vpos >= VIDEO_V_END) then
                   videoout_out.r      <= (others => '0');
                   videoout_out.g      <= (others => '0');
                   videoout_out.b      <= (others => '0');

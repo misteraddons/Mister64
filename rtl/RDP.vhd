@@ -52,13 +52,11 @@ entity RDP is
       ddr3_DOUT            : in  std_logic_vector(63 downto 0);
       ddr3_DOUT_READY      : in  std_logic;
             
-      fifoout_reset        : out std_logic := '0'; 
       fifoout_Din          : out std_logic_vector(91 downto 0) := (others => '0'); -- 64bit data + 20 bit address + 8 byte enables
       fifoout_Wr           : out std_logic := '0';  
       fifoout_nearfull     : in  std_logic;   
       fifoout_empty        : in  std_logic;        
       
-      fifooutZ_reset       : out std_logic := '0'; 
       fifooutZ_Din         : out std_logic_vector(91 downto 0) := (others => '0'); -- 64bit data + 20 bit address + 8 byte enables
       fifooutZ_Wr          : out std_logic := '0';  
       fifooutZ_nearfull    : in  std_logic;   
@@ -75,13 +73,11 @@ entity RDP is
       sdram_dataRead       : in  std_logic_vector(31 downto 0);
       sdram_valid          : in  std_logic;
       
-      rdp9fifo_reset       : out std_logic := '0'; 
       rdp9fifo_Din         : out std_logic_vector(53 downto 0) := (others => '0'); -- 32bit data + 18 bit address + 4bit byte enable
       rdp9fifo_Wr          : out std_logic := '0';  
       rdp9fifo_nearfull    : in  std_logic;  
       rdp9fifo_empty       : in  std_logic;
       
-      rdp9fifoZ_reset      : out std_logic := '0'; 
       rdp9fifoZ_Din        : out std_logic_vector(49 downto 0) := (others => '0'); -- 32bit data + 18 bit address
       rdp9fifoZ_Wr         : out std_logic := '0';  
       rdp9fifoZ_nearfull   : in  std_logic;  
@@ -99,10 +95,6 @@ entity RDP is
       RSP2RDP_data         : in  std_logic_vector(63 downto 0);
       RSP2RDP_we           : in  std_logic;
       RSP2RDP_done         : in  std_logic;
-      
-      -- synthesis translate_off
-      commandIsIdle_out    : out std_logic;
-      -- synthesis translate_on
       
       SS_reset             : in  std_logic;
       SS_DataWrite         : in  std_logic_vector(63 downto 0);
@@ -147,7 +139,6 @@ architecture arch of RDP is
    signal commandRAMstore           : std_logic := '0';
    signal commandRAMMux             : std_logic := '0';
    signal commandCntNext            : unsigned(4 downto 0) := (others => '0');
-   signal commandIsIdle             : std_logic;
    signal commandReqData            : std_logic;
    signal commandSyncFull           : std_logic;
    
@@ -268,8 +259,6 @@ architecture arch of RDP is
    signal fillBE                    : unsigned(7 downto 0);
    signal fillColor                 : unsigned(63 downto 0);
    signal fillAddr                  : unsigned(25 downto 0) := (others => '0');
-   signal fillX                     : unsigned(11 downto 0) := (others => '0');
-   signal fillY                     : unsigned(11 downto 0) := (others => '0');
 
    -- pipeline
    signal pipe_busy                 : std_logic;
@@ -300,8 +289,6 @@ architecture arch of RDP is
    
    signal writePixel                : std_logic;
    signal writePixelAddr            : unsigned(25 downto 0);
-   signal writePixelX               : unsigned(11 downto 0);
-   signal writePixelY               : unsigned(11 downto 0);
    signal writePixelColor           : tcolor3_u8;
    signal writePixelCvg             : unsigned(2 downto 0);
    signal writePixelFBData9         : unsigned(31 downto 0);
@@ -366,7 +353,12 @@ architecture arch of RDP is
    signal export_loadData           : rdp_export_type; 
    signal export_loadValue          : rdp_export_type; 
    
+   signal export_fillX              : unsigned(11 downto 0);
+   signal export_fillY              : unsigned(11 downto 0);
+   
    signal export_pipeDone           : std_logic;       
+   signal export_writePixelX        : unsigned(11 downto 0);
+   signal export_writePixelY        : unsigned(11 downto 0);
    signal export_pipeO              : rdp_export_type;
    signal export_Color              : rdp_export_type;
    signal export_RGBA               : rdp_export_type;
@@ -406,7 +398,9 @@ begin
    reg_addr      <= 15x"0" & RSP_RDP_reg_addr when (RSP_RDP_reg_read = '1' or RSP_RDP_reg_write = '1') else bus_addr;     
    reg_dataWrite <= std_logic_vector(RSP_RDP_reg_dataOut) when (RSP_RDP_reg_write = '1') else bus_dataWrite;
 
-   rdram_rnw <= '1';
+   rdram_rnw       <= '1';
+   rdram_writeMask <= (others => '0');
+   rdram_dataWrite <= (others => '0');
    
    FB_req_addr  <= settings_colorImage.FB_base + FBaddr;
    FB_reqZ_addr <= settings_Z_base + FBZaddr;
@@ -820,8 +814,7 @@ begin
       cmdfifo_Din             => cmdfifo_Din,
       cmdfifo_wr              => cmdfifo_wr,
       cmdfifo_nearfull        => cmdfifo_nearfull,
-                                          
-      commandIsIdle           => commandIsIdle,  
+                                           
       commandReqData          => commandReqData,  
          
       poly_done               => poly_done,       
@@ -910,10 +903,6 @@ begin
    settings_tile.Tile_mirrorS  <= tileSettings_RdData(8);
    settings_tile.Tile_maskS    <= unsigned(tileSettings_RdData( 7 downto  4));
    settings_tile.Tile_shiftS   <= unsigned(tileSettings_RdData( 3 downto  0));
-   
-   -- synthesis translate_off
-   commandIsIdle_out <= commandIsIdle;
-   -- synthesis translate_on
    
    iTextureReceiveRAM: entity mem.dpram
    generic map 
@@ -1022,14 +1011,14 @@ begin
       -- synthesis translate_off
       pipeIn_cvg16            => pipeIn_cvg16, 
       pipeInSTWZ              => pipeInSTWZ,
+      fillX                   => export_fillX,   
+      fillY                   => export_fillY, 
       -- synthesis translate_on
 
       fillWrite               => fillWrite,
       fillBE                  => fillBE,   
       fillColor               => fillColor,
-      fillAddr                => fillAddr,
-      fillX                   => fillX,   
-      fillY                   => fillY   
+      fillAddr                => fillAddr 
    );
    
    TextureRamDataIn(0) <= TextureRam0Data;
@@ -1257,6 +1246,8 @@ begin
       pipeInSTWZ              => pipeInSTWZ,
       
       export_pipeDone         => export_pipeDone,
+      export_writePixelX      => export_writePixelX,    
+      export_writePixelY      => export_writePixelY, 
       export_pipeO            => export_pipeO,   
       export_Color            => export_Color,   
       export_RGBA             => export_RGBA,   
@@ -1289,9 +1280,7 @@ begin
       -- synthesis translate_on
       
       writePixel              => writePixel,     
-      writePixelAddr          => writePixelAddr,    
-      writePixelX             => writePixelX,    
-      writePixelY             => writePixelY,   
+      writePixelAddr          => writePixelAddr,      
       writePixelColorOut      => writePixelColor,
       writePixelCvg           => writePixelCvg,
       writePixelFBData9       => writePixelFBData9,
@@ -1598,7 +1587,7 @@ begin
          variable export_fillAddr   : unsigned(25 downto 0);
          variable export_fillColor  : unsigned(63 downto 0);
          variable export_fillBE     : unsigned(7 downto 0);
-         variable export_fillX      : unsigned(11 downto 0);
+         variable export_fillX_mod  : unsigned(11 downto 0);
          variable export_fillIndex  : integer;
          variable export_copyIndex  : integer;
          variable export_copyAddr   : unsigned(31 downto 0);
@@ -1782,9 +1771,9 @@ begin
                   write(line_out, to_hstring(writePixelData32));
                end if;
                write(line_out, string'(" X ")); 
-               write(line_out, to_string_len(to_integer(writePixelX), 5));
+               write(line_out, to_string_len(to_integer(export_writePixelX), 5));
                write(line_out, string'(" Y ")); 
-               write(line_out, to_string_len(to_integer(writePixelY), 5));
+               write(line_out, to_string_len(to_integer(export_writePixelY), 5));
                write(line_out, string'(" D1 "));
                if (settings_colorImage.FB_size = SIZE_16BIT) then
                   write(line_out, to_hstring(to_unsigned(0, 30) & writePixelCvg(1 downto 0)));
@@ -1846,7 +1835,7 @@ begin
                      export_fillAddr  := fillAddr(25 downto 3) & "000";
                      export_fillColor := fillColor;
                      export_fillBE    := fillBE sll to_integer(fillAddr(2 downto 0));
-                     export_fillX     := fillX;
+                     export_fillX_mod := export_fillX;
                      export_fillIndex := tracecounts_out(1);
                      while (export_fillBE(1 downto 0) /= "11") loop
                         export_fillAddr  := export_fillAddr + 2;
@@ -1862,9 +1851,9 @@ begin
                            write(line_out, string'(" D ")); 
                            write(line_out, to_hstring(x"0000" & byteswap16(export_fillColor(15 downto 0))));
                            write(line_out, string'(" X ")); 
-                           write(line_out, to_string_len(to_integer(export_fillX), 5));
+                           write(line_out, to_string_len(to_integer(export_fillX_mod), 5));
                            write(line_out, string'(" Y ")); 
-                           write(line_out, to_string_len(to_integer(fillY), 5));
+                           write(line_out, to_string_len(to_integer(export_fillY), 5));
                            write(line_out, string'(" D1 "));
                            write(line_out, to_hstring(to_unsigned(0, 30) & export_fillColor(8) & export_fillColor(8)));
                            write(line_out, string'(" D2 "));
@@ -1877,7 +1866,7 @@ begin
                         export_fillAddr  := export_fillAddr + 2;
                         export_fillColor := x"0000" & export_fillColor(63 downto 16);
                         export_fillBE    := "00" & export_fillBE(7 downto 2);
-                        export_fillX     := export_fillX + 1;
+                        export_fillX_mod := export_fillX_mod + 1;
                      end loop;
                      tracecounts_out(1) <= export_fillIndex;
 
@@ -1885,7 +1874,7 @@ begin
                      export_fillAddr  := fillAddr(25 downto 3) & "000";
                      export_fillColor := fillColor;
                      export_fillBE    := fillBE sll to_integer(fillAddr(2 downto 0));
-                     export_fillX     := fillX;
+                     export_fillX_mod := export_fillX;
                      export_fillIndex := tracecounts_out(1);
                      while (export_fillBE(3 downto 0) /= "1111") loop
                         export_fillAddr  := export_fillAddr + 4;
@@ -1901,9 +1890,9 @@ begin
                            write(line_out, string'(" D ")); 
                            write(line_out, to_hstring(byteswap32(export_fillColor(31 downto 0))));
                            write(line_out, string'(" X ")); 
-                           write(line_out, to_string_len(to_integer(export_fillX), 5));
+                           write(line_out, to_string_len(to_integer(export_fillX_mod), 5));
                            write(line_out, string'(" Y ")); 
-                           write(line_out, to_string_len(to_integer(fillY), 5));
+                           write(line_out, to_string_len(to_integer(export_fillY), 5));
                            write(line_out, string'(" D1 "));
                            write(line_out, to_hstring(to_unsigned(0, 32)));
                            write(line_out, string'(" D2 "));
@@ -1916,7 +1905,7 @@ begin
                         export_fillAddr  := export_fillAddr + 4;
                         export_fillColor := x"00000000" & export_fillColor(63 downto 32);
                         export_fillBE    := "0000" & export_fillBE(7 downto 4);
-                        export_fillX     := export_fillX + 1;
+                        export_fillX_mod := export_fillX_mod + 1;
                      end loop;
                      tracecounts_out(1) <= export_fillIndex;
                   

@@ -92,14 +92,14 @@ entity RDP_raster is
       -- synthesis translate_off
       pipeIn_cvg16            : out unsigned(15 downto 0) := (others => '0');
       pipeInSTWZ              : out tcolor4_s32;
+      fillX                   : out unsigned(11 downto 0) := (others => '0');
+      fillY                   : out unsigned(11 downto 0) := (others => '0');
       -- synthesis translate_on
 
       fillWrite               : out std_logic := '0';
       fillBE                  : out unsigned(7 downto 0) := (others => '0');
       fillColor               : out unsigned(63 downto 0) := (others => '0');
-      fillAddr                : out unsigned(25 downto 0) := (others => '0');
-      fillX                   : out unsigned(11 downto 0) := (others => '0');
-      fillY                   : out unsigned(11 downto 0) := (others => '0')
+      fillAddr                : out unsigned(25 downto 0) := (others => '0')
    );
 end entity;
 
@@ -375,18 +375,11 @@ architecture arch of RDP_raster is
    signal load_T_corrected    : signed(12 downto 0);   
    signal load_S_shifted      : unsigned(10 downto 0);
    signal load_bit3flipped    : std_logic;
-   signal load_hibit          : std_logic;
    signal load_linesize       : unsigned(22 downto 0);
    signal load_tbase_mul      : unsigned(21 downto 0);
    signal load_tbase          : unsigned(8 downto 0);
    signal load_tmemAddr0      : unsigned(10 downto 0);
-   signal load_tmemAddr1      : unsigned(10 downto 0);
-   signal load_tmemAddr2      : unsigned(10 downto 0);
-   signal load_tmemAddr3      : unsigned(10 downto 0);
-   signal load_Ram0Addr       : unsigned(10 downto 0) := (others => '0');
-   signal load_Ram1Addr       : unsigned(10 downto 0) := (others => '0');
-   signal load_Ram2Addr       : unsigned(10 downto 0) := (others => '0');
-   signal load_Ram3Addr       : unsigned(10 downto 0) := (others => '0');      
+   signal load_Ram0Addr       : unsigned(10 downto 0) := (others => '0');  
    signal load_Ram0Data       : std_logic_vector(15 downto 0) := (others => '0');
    signal load_Ram1Data       : std_logic_vector(15 downto 0) := (others => '0');
    signal load_Ram2Data       : std_logic_vector(15 downto 0) := (others => '0');
@@ -397,6 +390,13 @@ architecture arch of RDP_raster is
    -- export only
    -- synthesis translate_off
    signal load_posY           : unsigned(11 downto 0) := (others => '0');
+   signal load_hibit          : std_logic;
+   signal load_tmemAddr1      : unsigned(10 downto 0);
+   signal load_tmemAddr2      : unsigned(10 downto 0);
+   signal load_tmemAddr3      : unsigned(10 downto 0);
+   signal load_Ram1Addr       : unsigned(10 downto 0) := (others => '0');
+   signal load_Ram2Addr       : unsigned(10 downto 0) := (others => '0');
+   signal load_Ram3Addr       : unsigned(10 downto 0) := (others => '0');    
    -- synthesis translate_on
 
 begin 
@@ -1077,10 +1077,12 @@ begin
                
                   fillWrite      <= '1';
                   fillAddr       <= calcPixelAddr;
-                  fillX          <= line_posX;
-                  fillY          <= line_posY;
                   fillColor      <= byteswap32(settings_fillcolor.color) & byteswap32(settings_fillcolor.color);
                   fillBE         <= (others => '1');
+                  -- synthesis translate_off
+                  fillX          <= line_posX;
+                  fillY          <= line_posY;
+                  -- synthesis translate_on
                   
                   case (settings_colorImage.FB_size) is
                      when SIZE_8BIT  => 
@@ -1160,19 +1162,22 @@ begin
    
    -- todo: sorting required?
    load_tmemAddr0 <= (load_tbase & "00") + (load_s_shifted(10 downto 2) & "0" & load_s_shifted(0));
+-- synthesis translate_off
    load_tmemAddr1 <= load_tmemAddr0 + 1;
    load_tmemAddr2 <= load_tmemAddr0 + 2;
    load_tmemAddr3 <= load_tmemAddr0 + 3;
-   
    load_hibit       <= load_tmemAddr0(10);
+-- synthesis translate_on
    
    TextureReqRAMaddr <= load_MemAddr;
    TextureReqRAMPtr  <= TextureReqRAM_index when (loadstate = LOADRAM or memAdvance = 2) else (TextureReqRAM_index + 1);
    
    load_Ram0Addr <= load_tmemAddr0(10 downto 1) & '1';
+-- synthesis translate_off
    load_Ram1Addr <= load_tmemAddr0(10 downto 1) & '0';
    load_Ram2Addr <= load_tmemAddr0(10 downto 2) & "11";
    load_Ram3Addr <= load_tmemAddr0(10 downto 2) & "10";
+-- synthesis translate_on
    
    TextureRAMDataMuxed <= TextureReqRAMData(63 downto 48) & TextureReqRAMData(63 downto 48) & TextureReqRAMData(63 downto 48) & TextureReqRAMData(63 downto 48) when (memAdvance = 2 and load_MemAddr(2 downto 0) = "000") else
                           TextureReqRAMData(47 downto 32) & TextureReqRAMData(47 downto 32) & TextureReqRAMData(47 downto 32) & TextureReqRAMData(47 downto 32) when (memAdvance = 2 and load_MemAddr(2 downto 0) = "010") else
@@ -1191,7 +1196,7 @@ begin
    load_Ram1Data <= TextureRAMDataMuxed(47 downto 32) when (load_T_corrected(0) = '0' or settings_textureImage.tex_size = SIZE_32BIT) else TextureRAMDataMuxed(15 downto  0);
    load_Ram2Data <= TextureRAMDataMuxed(31 downto 16) when (load_T_corrected(0) = '0' or settings_textureImage.tex_size = SIZE_32BIT) else TextureRAMDataMuxed(63 downto 48);
    load_Ram3Data <= TextureRAMDataMuxed(15 downto  0) when (load_T_corrected(0) = '0' or settings_textureImage.tex_size = SIZE_32BIT) else TextureRAMDataMuxed(47 downto 32);
-   
+  
    process (clk1x)
    begin
       if rising_edge(clk1x) then
