@@ -178,6 +178,10 @@ architecture arch of cpu is
    
    signal value1                       : unsigned(63 downto 0) := (others => '0');
    signal value2                       : unsigned(63 downto 0) := (others => '0');
+   signal executeForwardValue1         : std_logic := '0';
+   signal executeForwardValue2         : std_logic := '0';
+   signal writebackForwardValue1       : std_logic := '0';
+   signal writebackForwardValue2       : std_logic := '0';
                
    -- stage 1          
    -- cache
@@ -225,8 +229,6 @@ architecture arch of cpu is
    signal decodeRD                     : unsigned(4 downto 0) := (others => '0');
    signal decodeTarget                 : unsigned(4 downto 0) := (others => '0');
    signal decodeJumpTarget             : unsigned(25 downto 0) := (others => '0');
-   signal decodeForwardValue1          : std_logic := '0';
-   signal decodeForwardValue2          : std_logic := '0';
    signal decodeUseImmidateValue2      : std_logic := '0';
    signal decodeShiftSigned            : std_logic := '0';
    signal decodeShift32                : std_logic := '0';
@@ -1111,19 +1113,19 @@ begin
                   
                   -- operand fetching
                   decodeValue1     <= unsigned(regs1_q_b);
-                  if    (decSource1 > 0 and resultTarget    = decSource1 and resultWriteEnable    = '1') then decodeValue1 <= resultData;
-                  elsif (decSource1 > 0 and writebackTarget = decSource1 and writebackWriteEnable = '1') then decodeValue1 <= writebackData;
+                  if (decSource1 > 0 and writebackTarget = decSource1 and writebackWriteEnable = '1') then 
+                     decodeValue1 <= writebackData;
                   end if;
                   
                   decodeValue2     <= unsigned(regs2_q_b);
-                  if    (decSource2 > 0 and resultTarget    = decSource2 and resultWriteEnable    = '1') then decodeValue2 <= resultData;
-                  elsif (decSource2 > 0 and writebackTarget = decSource2 and writebackWriteEnable = '1') then decodeValue2 <= writebackData;
+                  if (decSource2 > 0 and writebackTarget = decSource2 and writebackWriteEnable = '1') then 
+                     decodeValue2 <= writebackData;
                   end if;
                   
-                  decodeForwardValue1 <= '0';
-                  decodeForwardValue2 <= '0';
-                  if (decSource1 > 0 and decodeTarget = decSource1) then decodeForwardValue1 <= '1'; end if;
-                  if (decSource2 > 0 and decodeTarget = decSource2) then decodeForwardValue2 <= '1'; end if;
+                  executeForwardValue1 <= '0';
+                  executeForwardValue2 <= '0';
+                  if (decSource1 > 0 and decodeTarget = decSource1) then executeForwardValue1 <= '1'; end if;
+                  if (decSource2 > 0 and decodeTarget = decSource2) then executeForwardValue2 <= '1'; end if;
 
                   -- FPU operand fetching
                   decodeFPUValue1 <= unsigned(FPUregs1_q_b);
@@ -1470,8 +1472,13 @@ begin
    
    ---------------------- Operand forward ------------------
    
-   value1 <= resultData when (decodeForwardValue1 = '1' and resultWriteEnable = '1') else decodeValue1;
-   value2 <= resultData when (decodeForwardValue2 = '1' and resultWriteEnable = '1') else decodeValue2;
+   value1 <= resultData    when (executeForwardValue1   = '1' and resultWriteEnable = '1') else 
+             writebackData when (writebackForwardValue1 = '1') else 
+             decodeValue1;
+   
+   value2 <= resultData    when (executeForwardValue2   = '1' and resultWriteEnable = '1') else 
+             writebackData when (writebackForwardValue2 = '1') else 
+             decodeValue2;
    
    ---------------------- Adder ------------------
    value2_muxedSigned <= unsigned(resize(signed(decodeImmData), 64)) when (decodeUseImmidateValue2) else value2;
@@ -2412,8 +2419,20 @@ begin
                   executeNew          <= '0';
                end if;
 
-               if (writebackStallFromMEM = '1' and writebackNew = '1') then
-                  stall3 <= '0';
+               if (writebackStallFromMEM = '1') then
+                  if (writebackNew = '1' or (mem_finished_read = '1' and writeback_COP1_ReadEnable = '0')) then
+                     stall3 <= '0';
+                  end if;
+               end if;
+               
+               if (executeStallFromMEM = '1') then               
+                  if (executeMemReadEnable = '1' and executeCOP1ReadEnable = '0') then
+                     if (to_integer(unsigned(executeMemAddress(31 downto 29))) = 4 and privilegeMode = "00" and DATACACHEON_intern = '1') then
+                        if (datacache_readdone = '1') then
+                           stall3 <= '0';
+                        end if;
+                     end if;
+                  end if;
                end if;
                
             end if;
@@ -2491,7 +2510,6 @@ begin
                
                   executeIgnoreNext             <= EXEIgnoreNext;
                    
-                  
                   if (executeIgnoreNext = '1') then
                   
                      resultWriteEnable      <= '0';
@@ -2848,6 +2866,9 @@ begin
             if (stall4Masked = 0) then
             
                writebackNew   <= '0';
+               
+               writebackForwardValue1 <= '0';
+               writebackForwardValue2 <= '0';
             
                if (executeNew = '1') then
                
@@ -2871,6 +2892,17 @@ begin
                   cop1_stage4_target           <= execute_COP1_Target;
                   
                   writeback_fifoStall          <= '0';
+                  
+                  -- check if last command must be forwarded
+                  if (resultWriteEnable = '1') then
+                     if (decSource1 > 0 and resultTarget = decSource1) then writebackForwardValue1 <= '1'; end if;
+                     if (decSource2 > 0 and resultTarget = decSource2) then writebackForwardValue2 <= '1'; end if;
+                  end if;
+                  
+                  if (executeMemReadEnable = '1' and executeCOP1ReadEnable = '0') then
+                     if (decodeSource1 > 0 and resultTarget = decodeSource1) then writebackForwardValue1 <= '1'; end if;
+                     if (decodeSource2 > 0 and resultTarget = decodeSource2) then writebackForwardValue2 <= '1'; end if;
+                  end if;
                   
                   if (executeMemWriteEnable = '1') then
                   
