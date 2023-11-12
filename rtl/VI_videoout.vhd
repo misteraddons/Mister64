@@ -28,6 +28,7 @@ entity VI_videoout is
       VI_GAMMAOFF                      : in  std_logic;
       VI_NOISEOFF                      : in  std_logic;
       VI_DEDITHEROFF                   : in  std_logic;
+      VI_DEDITHERFORCE                 : in  std_logic;
       VI_AAOFF                         : in  std_logic;
       VI_DIVOTOFF                      : in  std_logic;
                   
@@ -391,6 +392,7 @@ begin
       reset                            => reset_1x,
       
       VI_DEDITHEROFF                   => VI_DEDITHEROFF,
+      VI_DEDITHERFORCE                 => VI_DEDITHERFORCE,
       VI_AAOFF                         => VI_AAOFF,
       VI_DIVOTOFF                      => VI_DIVOTOFF,
       

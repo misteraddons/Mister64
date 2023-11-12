@@ -11,9 +11,9 @@ entity Gamepad is
       second_ena           : in  std_logic;
      
       PADTYPE              : in  std_logic_vector(2 downto 0); -- 000 = normal, 001 = empty, 010 = cpak, 011 = rumble, 100 = snac, 101 = transfer pak
+      MOUSETYPE            : in  std_logic_vector(2 downto 0); -- 00 - mouse off, 001 : ABZ, 010: ZAB, 011: ZBA
       PADDPADSWAP          : in  std_logic;
       CPAKFORMAT           : in  std_logic;
-      PADSLOW              : in  std_logic;
       
       command_start        : in  std_logic;                    -- high for 1 clock cycle when a new command is issued from PIF. toPad_ena will also be high, sending the first byte with data containing the command ID 
       command_padindex     : in  unsigned(1 downto 0);         -- pad number 0..3
@@ -50,6 +50,13 @@ entity Gamepad is
       pad_2_analog_v       : in  std_logic_vector(7 downto 0);      
       pad_3_analog_h       : in  std_logic_vector(7 downto 0);
       pad_3_analog_v       : in  std_logic_vector(7 downto 0);
+      
+      MouseEvent           : in  std_logic;
+      MouseLeft            : in  std_logic;
+      MouseRight           : in  std_logic;
+      MouseMiddle          : in  std_logic;
+      MouseX               : in  signed(8 downto 0);
+      MouseY               : in  signed(8 downto 0);
       
       rumble               : out std_logic_vector(3 downto 0) := (others => '0');
       
@@ -111,7 +118,7 @@ architecture arch of Gamepad is
    
    signal pad_muxed_A               : std_logic;
    signal pad_muxed_B               : std_logic;
-   signal pad_muxed_C               : std_logic;
+   signal pad_muxed_Z               : std_logic;
    signal pad_muxed_START           : std_logic;
    signal pad_muxed_DPAD_UP         : std_logic;
    signal pad_muxed_DPAD_DOWN       : std_logic;
@@ -171,11 +178,20 @@ architecture arch of Gamepad is
    constant tpakMaxRomBank          : integer := 64; -- todo: allow different GB roms/MBC
    constant tpakMaxRamBank          : integer := 4; -- todo: allow different GB roms/MBC
    
+   -- Mouse
+   signal prevMouseEvent            : std_logic := '0';
+   
+   signal mouseAccX                 : signed(9 downto 0) := (others => '0');
+   signal mouseAccY                 : signed(9 downto 0) := (others => '0');
+                                    
+   signal mouseOutX                 : signed(7 downto 0) := (others => '0');
+   signal mouseOutY                 : signed(7 downto 0) := (others => '0');
+   
 begin 
               
    pad_muxed_A          <= pad_A(to_integer(command_padindex));         
    pad_muxed_B          <= pad_B(to_integer(command_padindex));         
-   pad_muxed_C          <= pad_Z(to_integer(command_padindex));         
+   pad_muxed_Z          <= pad_Z(to_integer(command_padindex));         
    pad_muxed_START      <= pad_START(to_integer(command_padindex));     
    pad_muxed_DPAD_UP    <= pad_DPAD_UP(to_integer(command_padindex));   
    pad_muxed_DPAD_DOWN  <= pad_DPAD_DOWN(to_integer(command_padindex)); 
@@ -198,10 +214,7 @@ begin
       end case;   
    end process;
               
-   --slowNextByteEna <= slowcnt(slowcnt'left) when (PADSLOW = '1') else slowcnt(2);
-   slowNextByteEna <= '1' when (slowcnt = 1986 and PADSLOW = '1') else 
-                      '1' when (slowcnt = 1970 and PADSLOW = '0') else 
-                      '0';
+   slowNextByteEna <= '1' when (slowcnt = 1986) else '0';
            
    ipif_cpakinit : entity work.pif_cpakinit
    port map
@@ -220,6 +233,12 @@ begin
                       sdram_dataRead(31 downto 24);
            
    process (clk1x)
+      variable mouseIncX            : signed(9 downto 0) := (others => '0');
+      variable mouseIncY            : signed(9 downto 0) := (others => '0');
+      variable newMouseAccX         : signed(9 downto 0) := (others => '0');
+      variable newMouseAccY         : signed(9 downto 0) := (others => '0');
+      variable newMouseAccClippedX  : signed(9 downto 0) := (others => '0');
+      variable newMouseAccClippedY  : signed(9 downto 0) := (others => '0');
    begin
       if rising_edge(clk1x) then
       
@@ -234,6 +253,37 @@ begin
          else
             slowcnt <= slowcnt + 1;
          end if;
+         
+         prevMouseEvent  <= MouseEvent;
+         if (prevMouseEvent /= MouseEvent) then
+            mouseIncX := resize(MouseX, mouseIncX'length);
+            mouseIncY := resize(MouseY, mouseIncX'length);
+         else
+            mouseIncX := to_signed(0, mouseIncX'length);
+            mouseIncY := to_signed(0, mouseIncY'length);
+         end if;
+
+         newMouseAccX := mouseAccX + mouseIncX;
+         newMouseAccY := mouseAccY + mouseIncY;
+
+         if (newMouseAccX >= 255) then
+             newMouseAccClippedX := to_signed(255, newMouseAccClippedX'length);
+         elsif (newMouseAccX <= -256) then
+             newMouseAccClippedX := to_signed(-256, newMouseAccClippedX'length);
+         else
+             newMouseAccClippedX := newMouseAccX;
+         end if;
+
+         if (newMouseAccY >= 255) then
+             newMouseAccClippedY := to_signed(255, newMouseAccClippedY'length);
+         elsif (newMouseAccY <= -256) then
+             newMouseAccClippedY := to_signed(-256, newMouseAccClippedY'length);
+         else
+             newMouseAccClippedY := newMouseAccY;
+         end if;
+
+         mouseAccX <= newMouseAccClippedX;
+         mouseAccY <= newMouseAccClippedY;
          
          -- init PAK area
          case (PAKINITState) is      
@@ -301,6 +351,9 @@ begin
                         else
                            pakwrite  <= '1';
                         end if;
+                     else
+                        toPIF_timeout <= '1';
+                        stateNext     <= IDLE;
                      end if;
                   end if;
                end if;
@@ -366,7 +419,7 @@ begin
             
                toPIF_data(7) <= pad_muxed_A;         
                toPIF_data(6) <= pad_muxed_B;         
-               toPIF_data(5) <= pad_muxed_C;         
+               toPIF_data(5) <= pad_muxed_Z;         
                toPIF_data(4) <= pad_muxed_START;     
                toPIF_data(3) <= pad_muxed_DPAD_UP;   
                toPIF_data(2) <= pad_muxed_DPAD_DOWN; 
@@ -383,7 +436,22 @@ begin
                   if (signed(pad_muxed_analogV) >=  64) then toPIF_data(3) <= '1'; end if;
                   if (signed(pad_muxed_analogV) <= -64) then toPIF_data(2) <= '1'; end if;
                end if;
-            
+               
+               if (command_padindex = "00") then
+                  if (MOUSETYPE = "001") then
+                     toPIF_data(7) <= pad_muxed_A or MouseLeft;
+                     toPIF_data(6) <= pad_muxed_B or MouseRight;
+                     toPIF_data(5) <= pad_muxed_Z or MouseMiddle;
+                  elsif (MOUSETYPE = "010") then
+                     toPIF_data(7) <= pad_muxed_A or MouseRight;
+                     toPIF_data(6) <= pad_muxed_B or MouseMiddle;
+                     toPIF_data(5) <= pad_muxed_Z or MouseLeft;  
+                   elsif (MOUSETYPE = "011") then
+                     toPIF_data(7) <= pad_muxed_A or MouseMiddle;
+                     toPIF_data(6) <= pad_muxed_B or MouseRight;
+                     toPIF_data(5) <= pad_muxed_Z or MouseLeft;  
+                  end if;
+               end if;
             
             when RESPONSEPAD1 => 
                if (slowNextByteEna = '1') then
@@ -422,6 +490,21 @@ begin
                   elsif (pad_muxed_DPAD_RIGHT = '1')                                                           then toPIF_data <= std_logic_vector(to_signed(69,8));
                   else toPIF_data <= (others => '0'); end if;
                end if;
+               
+               if (slowNextByteEna = '1' and command_padindex = "00" and MOUSETYPE /= "000") then
+                  if (mouseAccX >= 85) then
+                     toPIF_data <= std_logic_vector(to_signed(85, mouseOutX'length));
+                     mouseAccX  <= mouseAccX - 85 + mouseIncX;
+                  elsif (mouseAccX <= -85) then
+                     toPIF_data <= std_logic_vector(to_signed(-85, mouseOutX'length));
+                     mouseAccX  <= mouseAccX + 85 + mouseIncX;
+                  elsif (mouseAccX >= 15 or mouseAccX <= -15) then
+                     toPIF_data <= std_logic_vector(resize(mouseAccX, mouseOutX'length));
+                     mouseAccX  <= mouseIncX;
+                  else
+                     toPIF_data <= (others => '0');
+                  end if;
+               end if;
             
             when RESPONSEPAD3 =>  
                if (slowNextByteEna = '1') then
@@ -442,6 +525,21 @@ begin
                   elsif (pad_muxed_DPAD_UP   = '1')                                                              then toPIF_data <= std_logic_vector(to_signed(69,8));
                   elsif (pad_muxed_DPAD_DOWN = '1')                                                              then toPIF_data <= std_logic_vector(to_signed(-69,8));
                   else toPIF_data <= (others => '0'); end if;
+               end if;
+               
+               if (slowNextByteEna = '1' and command_padindex = "00" and MOUSETYPE /= "000") then
+                  if (mouseAccY >= 85) then
+                     toPIF_data <= std_logic_vector(to_signed(85, mouseOutY'length));
+                     mouseAccY  <= mouseAccY - 85 + mouseIncY;
+                  elsif (mouseAccY <= -85) then
+                     toPIF_data <= std_logic_vector(to_signed(-85, mouseOutY'length));
+                     mouseAccY  <= mouseAccY + 85 + mouseIncY;
+                  elsif (mouseAccY >= 15 or mouseAccY <= -15) then
+                     toPIF_data <= std_logic_vector(resize(mouseAccY, mouseOutY'length));
+                     mouseAccY  <= mouseIncY;
+                  else
+                     toPIF_data <= (others => '0');
+                  end if;
                end if;
                
 ----------------------------- PAK common -------------------------------

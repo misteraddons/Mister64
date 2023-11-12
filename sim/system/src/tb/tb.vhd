@@ -118,6 +118,7 @@ begin
       VI_GAMMAOFF           => '0',
       VI_NOISEOFF           => '1',
       VI_DEDITHEROFF        => '0',
+      VI_DEDITHERFORCE      => '0',
       VI_AAOFF              => '0',
       VI_DIVOTOFF           => '0',
       
@@ -176,8 +177,8 @@ begin
       PADTYPE1              => "000",
       PADTYPE2              => "000",
       PADTYPE3              => "000",
+      MOUSETYPE             => "000",
       PADDPADSWAP           => '0',
-      PADSLOW               => '1',
       pad_A                 => "0000",
       pad_B                 => "0000",
       pad_Z                 => "0000",
@@ -200,6 +201,13 @@ begin
       pad_2_analog_v        => x"00",
       pad_3_analog_h        => x"00",
       pad_3_analog_v        => x"00", 
+      
+      MouseEvent            => '0',
+      MouseLeft             => '0',
+      MouseRight            => '0',
+      MouseMiddle           => '0',
+      MouseX                => 9x"00",
+      MouseY                => 9x"00",
       
       --snac
       PIFCOMPARE            => '0',

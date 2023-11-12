@@ -14,6 +14,7 @@ entity VI_filter is
       reset                            : in  std_logic;
       
       VI_DEDITHEROFF                   : in  std_logic;
+      VI_DEDITHERFORCE                 : in  std_logic;
       VI_AAOFF                         : in  std_logic;
       VI_DIVOTOFF                      : in  std_logic;
       
@@ -198,7 +199,7 @@ begin
          stage1_x      <= stage0_x;
          stage1_y      <= stage0_y;
          stage1_Pix  <= stage0_Mid;
-         if (stage0_Mid.c = 7 and VI_CTRL_DEDITHER_FILTER_ENABLE = '1' and VI_DEDITHEROFF = '0') then
+         if (stage0_Mid.c = 7 and (VI_DEDITHERFORCE = '1' or (VI_CTRL_DEDITHER_FILTER_ENABLE = '1' and VI_DEDITHEROFF = '0'))) then
             stage1_Pix.r <= dedither_out(0);
             stage1_Pix.g <= dedither_out(1);
             stage1_Pix.b <= dedither_out(2);

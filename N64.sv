@@ -388,6 +388,7 @@ parameter CONF_STR = {
    "O[57:55],Pad 3 Type,N64Pad,None,ControllerPak,RumblePak,SNAC;",
    "O[60:58],Pad 4 Type,N64Pad,None,ControllerPak,RumblePak,SNAC;",
    "O[92],Swap Analog<->DPAD,Off,On;",
+   "O[86:84],Mouse for P1,Off,Buttons ABZ,Buttons ZAB,Buttons ZBA;",
    "O[62:61],Dual Controller,Off,P1->P2,P1->P3;",
    "O[63],Analog Stick Swap,Off,On;",
 	"-;",
@@ -402,7 +403,7 @@ parameter CONF_STR = {
    "P1O[31],Dithering,Original,Off;",
    "P1O[32],VI Bilinear,Original,Off;",
    "P1O[33],VI Gamma,Original,Off;",
-   "P1O[34],VI Dedither,Original,Off;",
+   "P1O[88:87],VI Dedither,Original,Off,Force;",
    "P1O[35],VI Antialias,Original,Off;",
    "P1O[36],VI Divot,Original,Off;",
    "P1O[37],VI Noisedither,Original,Off;",
@@ -474,6 +475,8 @@ wire [15:0] joystick_analog_l1;
 wire [15:0] joystick_analog_l2;
 wire [15:0] joystick_analog_l3;
 
+wire [24:0] mouse;
+
 wire [10:0] ps2_key;
 
 wire [127:0] status_in = {status[127:40],ss_slot,status[37:0]};
@@ -544,6 +547,8 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
    .joystick_1_rumble(rumble[1] ? 16'hFFFF : 16'h0000),
    .joystick_2_rumble(rumble[2] ? 16'hFFFF : 16'h0000),
    .joystick_3_rumble(rumble[3] ? 16'hFFFF : 16'h0000),
+   
+   .ps2_mouse(mouse),
    
    .sd_lba('{sd_lba}),
 	.sd_rd(sd_rd),
@@ -771,7 +776,8 @@ n64top
    .CROPVERTICAL(status[45:44]),
    .VI_BILINEAROFF(status[32]),
    .VI_GAMMAOFF(status[33]),
-   .VI_DEDITHEROFF(status[34]),
+   .VI_DEDITHEROFF(status[87]),
+   .VI_DEDITHERFORCE(status[88]),
    .VI_AAOFF(status[35]),
    .VI_DIVOTOFF(status[36]),
    .VI_NOISEOFF(status[37]),
@@ -831,8 +837,8 @@ n64top
    .PADTYPE1         (status[54:52]),
    .PADTYPE2         (status[57:55]),
    .PADTYPE3         (status[60:58]),
+   .MOUSETYPE        (status[86:84]),
    .PADDPADSWAP      (status[92]),
-   .PADSLOW          (1'b1),
    .rumble           (rumble),
    .pad_A            ({joy4[ 4],joy3[ 4],joy2[ 4],joy[ 4]}),
    .pad_B            ({joy4[ 5],joy3[ 5],joy2[ 5],joy[ 5]}),
@@ -856,6 +862,12 @@ n64top
    .pad_2_analog_v   (joystick_analog_l2[15:8]),
    .pad_3_analog_h   (joystick_analog_l3[7:0]),
    .pad_3_analog_v   (joystick_analog_l3[15:8]),
+   .MouseEvent(mouse[24]),
+   .MouseLeft(mouse[0]),
+   .MouseRight(mouse[1]),
+   .MouseMiddle(mouse[2]),
+   .MouseX({mouse[4],mouse[15:8]}),
+   .MouseY({mouse[5],mouse[23:16]}),
  
     // snac  
    .PIFCOMPARE             (status[91]),

@@ -30,6 +30,7 @@ entity n64top is
       VI_BILINEAROFF          : in  std_logic;
       VI_GAMMAOFF             : in  std_logic;
       VI_DEDITHEROFF          : in  std_logic;
+      VI_DEDITHERFORCE        : in  std_logic;
       VI_AAOFF                : in  std_logic;
       VI_DIVOTOFF             : in  std_logic;
       VI_NOISEOFF             : in  std_logic;
@@ -89,8 +90,8 @@ entity n64top is
       PADTYPE1                : in  std_logic_vector(2 downto 0);
       PADTYPE2                : in  std_logic_vector(2 downto 0);
       PADTYPE3                : in  std_logic_vector(2 downto 0);
+      MOUSETYPE               : in  std_logic_vector(2 downto 0);
       PADDPADSWAP             : in  std_logic;
-      PADSLOW                 : in  std_logic;
       rumble                  : out std_logic_vector(3 downto 0);
       pad_A                   : in  std_logic_vector(3 downto 0);
       pad_B                   : in  std_logic_vector(3 downto 0);
@@ -114,6 +115,13 @@ entity n64top is
       pad_2_analog_v          : in  std_logic_vector(7 downto 0);      
       pad_3_analog_h          : in  std_logic_vector(7 downto 0);
       pad_3_analog_v          : in  std_logic_vector(7 downto 0);
+      
+      MouseEvent              : in  std_logic;
+      MouseLeft               : in  std_logic;
+      MouseRight              : in  std_logic;
+      MouseMiddle             : in  std_logic;
+      MouseX                  : in  signed(8 downto 0);
+      MouseY                  : in  signed(8 downto 0);
 
       --snac
       PIFCOMPARE              : in  std_logic;
@@ -776,6 +784,7 @@ begin
       VI_GAMMAOFF          => VI_GAMMAOFF,
       VI_NOISEOFF          => VI_NOISEOFF,
       VI_DEDITHEROFF       => VI_DEDITHEROFF,
+      VI_DEDITHERFORCE     => VI_DEDITHERFORCE,
       VI_AAOFF             => VI_AAOFF,
       VI_DIVOTOFF          => VI_DIVOTOFF,
      
@@ -1095,9 +1104,9 @@ begin
       second_ena           => second_ena,
       
       PADTYPE              => PADTYPE_latched,
+      MOUSETYPE            => MOUSETYPE,
       PADDPADSWAP          => PADDPADSWAP,
       CPAKFORMAT           => CPAKFORMAT,
-      PADSLOW              => PADSLOW,
       
       command_start        => command_startUSB,     
       command_padindex     => command_padindexUSB,  
@@ -1136,7 +1145,14 @@ begin
       pad_2_analog_v       => pad_2_analog_v,
       pad_3_analog_h       => pad_3_analog_h,
       pad_3_analog_v       => pad_3_analog_v,
-            
+      
+      MouseEvent           => MouseEvent,
+      MouseLeft            => MouseLeft, 
+      MouseRight           => MouseRight,
+      MouseMiddle          => MouseMiddle,
+      MouseX               => MouseX,    
+      MouseY               => MouseY,         
+      
       cpak_change          => cpak_change,
       tpak_change          => tpak_change,
       

@@ -639,7 +639,7 @@ begin
                         error <= '1';
                      end if;
                   else
-                     state         <= EXTCOMM_RESPONSE_VALIDOVER;
+                     state         <= EXTCOMM_SEND;
                   end if;
                
                when EXTCOMM_EVALTYPEEEPROMRTC =>      
