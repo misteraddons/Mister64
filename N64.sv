@@ -373,9 +373,9 @@ parameter CONF_STR = {
    "FS1,N64z64n64v64,Load;",
    "F2,GBCGB ,Load GB-Transfer;",
    "-;",
-	"D0R[40],Reload Backup RAM;",
-	"D0R[41],Save Backup RAM;",
-	"D0O[42],Autosave,On,Off;",
+	"R[40],Reload Backup RAM;",
+	"R[41],Save Backup RAM;",
+	"O[42],Autosave,On,Off;",
    //"-;",
 	//"O[46],Savestates to SDCard,On,Off;",
 	//"O[3],Autoincrement Slot,Off,On;",
@@ -754,6 +754,21 @@ wire [1:0] eepromtype = (status[77:75] == 3'b001) ? 2'b01 :
                         (status[77:75] == 3'b010) ? 2'b10 :
                         2'b00; 
 
+// change controller type only when OSD was closed
+reg [2:0] padtype0;
+reg [2:0] padtype1;
+reg [2:0] padtype2;
+reg [2:0] padtype3;
+
+always @(posedge clk_1x) begin
+   if (~OSD_STATUS) begin
+      padtype0 <= status[51:49];
+      padtype1 <= status[54:52];
+      padtype2 <= status[57:55];
+      padtype3 <= status[60:58];
+   end
+end
+
 n64top 
 #(
    .use2Xclock(1'b1)
@@ -833,10 +848,10 @@ n64top
    .sdram_dataRead    (sdram_dataRead    ),
       
    // pad
-   .PADTYPE0         (status[51:49]),
-   .PADTYPE1         (status[54:52]),
-   .PADTYPE2         (status[57:55]),
-   .PADTYPE3         (status[60:58]),
+   .PADTYPE0         (padtype0),
+   .PADTYPE1         (padtype1),
+   .PADTYPE2         (padtype2),
+   .PADTYPE3         (padtype3),
    .MOUSETYPE        (status[86:84]),
    .PADDPADSWAP      (status[92]),
    .rumble           (rumble),

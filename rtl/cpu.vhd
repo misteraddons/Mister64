@@ -216,6 +216,7 @@ architecture arch of cpu is
    -- stage 2           
    --regs      
    signal decodeNew                    : std_logic := '0';
+   signal decodeResultWriteEnable      : std_logic := '0';
    signal decode_irq                   : std_logic := '0';
    signal blockIRQ                     : std_logic := '0';
    signal decodeImmData                : unsigned(15 downto 0) := (others => '0');
@@ -224,7 +225,6 @@ architecture arch of cpu is
    signal decodeValue1                 : unsigned(63 downto 0) := (others => '0');
    signal decodeValue2                 : unsigned(63 downto 0) := (others => '0');
    signal decodeOP                     : unsigned(5 downto 0) := (others => '0');
-   signal decodeFunct                  : unsigned(5 downto 0) := (others => '0');
    signal decodeShamt                  : unsigned(5 downto 0) := (others => '0');
    signal decodeRD                     : unsigned(4 downto 0) := (others => '0');
    signal decodeTarget                 : unsigned(4 downto 0) := (others => '0');
@@ -241,9 +241,24 @@ architecture arch of cpu is
    signal decodeFPUTarget              : unsigned(4 downto 0) := (others => '0');
    signal decodeFPUCommandEnable       : std_logic := '0';
    signal decodeFPUTransferEnable      : std_logic := '0';
-   signal decodeFPUTransferWrite       : std_logic := '0';
    signal decodeFPUMULS                : std_logic := '0';
    signal decodeFPUMULD                : std_logic := '0';
+   signal decodeExcCode                : unsigned(3 downto 0); 
+   signal decodeExcCOP                 : unsigned(1 downto 0); 
+   signal decodecalcMULT               : std_logic := '0';
+   signal decodecalcMULTU              : std_logic := '0';
+   signal decodecalcDMULT              : std_logic := '0';
+   signal decodecalcDMULTU             : std_logic := '0';
+   signal decodecalcDIV                : std_logic := '0';
+   signal decodecalcDIVU               : std_logic := '0';
+   signal decodecalcDDIV               : std_logic := '0';
+   signal decodecalcDDIVU              : std_logic := '0';
+   signal decodehiUpdate               : std_logic := '0';
+   signal decodeloUpdate               : std_logic := '0';
+   signal decodeMemWriteEnable         : std_logic := '0';
+   signal decodeMemWriteLL             : std_logic := '0';
+   signal decodeMemReadEnable          : std_logic := '0';
+   signal decodeMem64Bit               : std_logic := '0';
    
    type t_decodeBitFuncType is
    (
@@ -291,6 +306,67 @@ architecture arch of cpu is
    );
    signal decodeResultMux : t_decodeResultMux;   
    signal decodeResult32               : std_logic := '0';
+   
+   type t_decodeExcType is
+   (
+      EXCTYPE_NONE,
+      EXCTYPE_DECODE, 
+      EXCTYPE_PC,
+      EXCTYPE_ADDRH,
+      EXCTYPE_ADDRW,
+      EXCTYPE_ADDRD,
+      EXCTYPE_ADD,
+      EXCTYPE_DADD,
+      EXCTYPE_ADDI,
+      EXCTYPE_DADDI,
+      EXCTYPE_SUB,
+      EXCTYPE_DSUB,
+      EXCTYPE_TRAPU0, 
+      EXCTYPE_TRAPU1, 
+      EXCTYPE_TRAPS0, 
+      EXCTYPE_TRAPS1, 
+      EXCTYPE_TRAPE0, 
+      EXCTYPE_TRAPE1, 
+      EXCTYPE_TRAPIU0,
+      EXCTYPE_TRAPIU1,
+      EXCTYPE_TRAPIS0,
+      EXCTYPE_TRAPIS1,
+      EXCTYPE_TRAPIE0,
+      EXCTYPE_TRAPIE1
+   );
+   signal decodeExcType : t_decodeExcType := EXCTYPE_NONE;    
+   
+   type t_decodeMemWriteType is
+   (
+      MEMWRITETYPE_BYTE,
+      MEMWRITETYPE_HALF,
+      MEMWRITETYPE_WORD,
+      MEMWRITETYPE_SWL,
+      MEMWRITETYPE_SWR,
+      MEMWRITETYPE_DWORD,
+      MEMWRITETYPE_SDL,
+      MEMWRITETYPE_SDR,
+      MEMWRITETYPE_COP1L,
+      MEMWRITETYPE_COP1H,
+      MEMWRITETYPE_COP1D
+   );
+   signal decodeMemWriteType : t_decodeMemWriteType := MEMWRITETYPE_BYTE;    
+   
+   type CPU_LOADTYPE is
+   (
+      LOADTYPE_SBYTE,
+      LOADTYPE_SWORD,
+      LOADTYPE_LEFT,
+      LOADTYPE_DWORD,
+      LOADTYPE_DWORDU,
+      LOADTYPE_BYTE,
+      LOADTYPE_WORD,
+      LOADTYPE_RIGHT,
+      LOADTYPE_QWORD,
+      LOADTYPE_LEFT64,
+      LOADTYPE_RIGHT64
+   );
+   signal decodeLoadType               : CPU_LOADTYPE;
    
    -- wires
    signal opcodeCacheMuxed             : unsigned(31 downto 0) := (others => '0');
@@ -342,21 +418,6 @@ architecture arch of cpu is
    signal resultDataMuxed              : unsigned(63 downto 0);
    signal resultDataMuxed64            : unsigned(63 downto 0);
    
-   type CPU_LOADTYPE is
-   (
-      LOADTYPE_SBYTE,
-      LOADTYPE_SWORD,
-      LOADTYPE_LEFT,
-      LOADTYPE_DWORD,
-      LOADTYPE_DWORDU,
-      LOADTYPE_BYTE,
-      LOADTYPE_WORD,
-      LOADTYPE_RIGHT,
-      LOADTYPE_QWORD,
-      LOADTYPE_LEFT64,
-      LOADTYPE_RIGHT64
-   );
-   
    --regs         
    signal executeNew                   : std_logic := '0';
    signal executeIgnoreNext            : std_logic := '0';
@@ -394,14 +455,10 @@ architecture arch of cpu is
 
    --wires
    signal EXEIgnoreNext                : std_logic := '0';
-   signal EXEresultWriteEnable         : std_logic;
    signal EXEBranchdelaySlot           : std_logic := '0';
    signal EXEBranchTaken               : std_logic := '0';
-   signal EXEMem64Bit                  : std_logic := '0';
-   signal EXEMemWriteEnable            : std_logic := '0';
    signal EXEMemWriteData              : unsigned(63 downto 0) := (others => '0');
    signal EXEMemWriteMask              : std_logic_vector(7 downto 0) := (others => '0');
-   signal EXEMemWriteException         : std_logic := '0';
    signal EXECOP0WriteEnable           : std_logic := '0';
    signal EXECOP0ReadEnable            : std_logic := '0';
    signal EXECOP0Read64                : std_logic := '0';
@@ -410,25 +467,12 @@ architecture arch of cpu is
    signal EXECOP2WriteEnable           : std_logic := '0';
    signal EXECOP2ReadEnable            : std_logic := '0';
    signal EXECOP2Read64                : std_logic := '0';
-   signal EXELoadType                  : CPU_LOADTYPE;
-   signal EXEReadEnable                : std_logic := '0';
-   signal EXEReadException             : std_logic := '0';
-   signal EXEcalcMULT                  : std_logic := '0';
-   signal EXEcalcMULTU                 : std_logic := '0';
-   signal EXEcalcDMULT                 : std_logic := '0';
-   signal EXEcalcDMULTU                : std_logic := '0';
-   signal EXEcalcDIV                   : std_logic := '0';
-   signal EXEcalcDIVU                  : std_logic := '0';
-   signal EXEcalcDDIV                  : std_logic := '0';
-   signal EXEcalcDDIVU                 : std_logic := '0';
-   signal EXEhiUpdate                  : std_logic := '0';
-   signal EXEloUpdate                  : std_logic := '0';
-   signal EXEerror_instr               : std_logic := '0';
    signal EXEllBit                     : std_logic := '0';
    signal EXEERET                      : std_logic := '0';
    signal EXECacheEnable               : std_logic := '0';
    signal EXECacheAddr                 : unsigned(28 downto 0);
    signal ExeCOP1ReadEnable            : std_logic := '0';
+   signal exeExceptionMem              : std_logic;
    
    --MULT/DIV
    type CPU_HILOCALC is
@@ -1075,6 +1119,8 @@ begin
    begin
       if (rising_edge(clk93)) then
       
+         error_instr  <= '0';
+      
          if (reset_93 = '1') then
          
             stall2           <= '0';
@@ -1104,7 +1150,6 @@ begin
                   decodeSource1    <= decSource1;
                   decodeSource2    <= decSource2;
                   decodeOP         <= decOP;
-                  decodeFunct      <= decFunct;     
                   decodeShamt      <= '0' & decShamt;     
                   decodeRD         <= decRD;        
                   decodeTarget     <= decTarget;    
@@ -1140,6 +1185,7 @@ begin
                   decodeFPUForwardUse <= decFPUForwardUse;
 
                   -- decoding default
+                  decodeResultWriteEnable <= '0';
                   decodeUseImmidateValue2 <= '0';
                   decodeShiftSigned       <= '0';
                   decodeShift32           <= '0';
@@ -1148,11 +1194,27 @@ begin
                   decodeBranchLikely      <= '0';
                   decodeFPUCommandEnable  <= '0';
                   decodeFPUTransferEnable <= '0';
-                  decodeFPUTransferWrite  <= '0';
                   decodeFPUMULS           <= '0';
                   decodeFPUMULD           <= '0';
                   blockIRQ                <= '0';
-
+                  decodeExcType           <= EXCTYPE_NONE;
+                  decodeExcCode           <= x"0";
+                  decodeExcCOP            <= "00";
+                  decodecalcMULT          <= '0';
+                  decodecalcMULTU         <= '0';
+                  decodecalcDMULT         <= '0';
+                  decodecalcDMULTU        <= '0';
+                  decodecalcDIV           <= '0';
+                  decodecalcDIVU          <= '0';
+                  decodecalcDDIV          <= '0';
+                  decodecalcDDIVU         <= '0';
+                  decodehiUpdate          <= '0';
+                  decodeloUpdate          <= '0';
+                  decodeMemWriteEnable    <= '0';
+                  decodeMemWriteLL        <= '0';
+                  decodeMemReadEnable     <= '0';
+                  decodeMem64Bit          <= '0';
+                  
                   -- decoding opcode specific
                   case (to_integer(decOP)) is
          
@@ -1160,153 +1222,296 @@ begin
                         case (to_integer(decFunct)) is
                         
                            when 16#00# => -- SLL
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTLEFT;
                               decodeShiftAmountType   <= "00";
                               decodeResult32          <= '1';
                               
                            when 16#02# => -- SRL
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShift32           <= '1';
                               decodeShiftAmountType   <= "00";
                               decodeResult32          <= '1';
                            
                            when 16#03# => -- SRA
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT; 
                               decodeShiftSigned       <= '1';
                               decodeShiftAmountType   <= "00";
                               decodeResult32          <= '1';
                               
                            when 16#04# => -- SLLV
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTLEFT;
                               decodeShiftAmountType   <= "01";
                               decodeResult32          <= '1';
                               
                            when 16#06# => -- SRLV
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShift32           <= '1';
                               decodeShiftAmountType   <= "01";
                               decodeResult32          <= '1';
                            
                            when 16#07# => -- SRAV
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftSigned       <= '1';
                               decodeShiftAmountType   <= "01";
                               decodeResult32          <= '1';
-                              
+
                            when 16#08# => -- JR
                               decodeBranchType        <= BRANCH_ALWAYS_REG;
+                              decodeExcType           <= EXCTYPE_PC;
+                              decodeExcCode           <= x"4";
                               
                            when 16#09# => -- JALR
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_PC;
                               decodeTarget            <= decRD;
                               decodeBranchType        <= BRANCH_ALWAYS_REG;
+                              decodeExcType           <= EXCTYPE_PC;
+                              decodeExcCode           <= x"4";
+                              
+                           when 16#0C# => -- SYSCALL
+                              decodeExcType           <= EXCTYPE_DECODE;
+                              decodeExcCode           <= x"8";
+                     
+                           when 16#0D# => -- BREAK
+                              decodeExcType           <= EXCTYPE_DECODE;
+                              decodeExcCode           <= x"9";
+                              
+                           when 16#0F# => -- SYNC
+                              null;
                               
                            when 16#10# => -- MFHI
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_HI;
+                            
+                           when 16#11# => -- MTHI
+                              decodehiUpdate <= '1';
                   
                            when 16#12# => -- MFLO
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_LO;
                               
+                           when 16#13# => -- MTLO
+                              decodeloUpdate <= '1';
+                              
                            when 16#14# => -- DSLLV
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTLEFT;
                               decodeShiftAmountType   <= "10";   
                   
                            when 16#16# => -- DSRLV
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftAmountType   <= "10";   
                               
                            when 16#17# => -- DSRAV
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftAmountType   <= "10";   
                               decodeShiftSigned       <= '1';
                               
+                           when 16#18# => -- MULT
+                              decodecalcMULT <= '1';
+                              
+                           when 16#19# => -- MULTU
+                              decodecalcMULTU <= '1';
+                              
+                           when 16#1A# => -- DIV
+                              decodecalcDIV <= '1';
+                              
+                           when 16#1B# => -- DIVU
+                              decodecalcDIVU <= '1';
+                              
+                           when 16#1C# => -- DMULT
+                              decodecalcDMULT <= '1';                
+                              
+                           when 16#1D# => -- DMULTU
+                              decodecalcDMULTU <= '1';                  
+                              
+                           when 16#1E# => -- DDIV
+                              decodecalcDDIV <= '1';             
+                              
+                           when 16#1F# => -- DDIVU
+                              decodecalcDDIVU <= '1';
+                              
                            when 16#20# => -- ADD
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_ADD;
                               decodeResult32          <= '1';
+                              decodeExcType           <= EXCTYPE_ADD;
+                              decodeExcCode           <= x"C";
                   
                            when 16#21# => -- ADDU
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_ADD;
                               decodeResult32          <= '1';
                               
                            when 16#22# => -- SUB
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SUB;
                               decodeResult32          <= '1';
+                              decodeExcType           <= EXCTYPE_SUB;
+                              decodeExcCode           <= x"C";
                            
                            when 16#23# => -- SUBU
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SUB;
                               decodeResult32          <= '1';
                            
                            when 16#24# => -- AND
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_AND;
                            
                            when 16#25# => -- OR
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_OR;
                               
                            when 16#26# => -- XOR
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_XOR;
                               
                            when 16#27# => -- NOR
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_NOR;
                               
                            when 16#2A# => -- SLT
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_BIT;
                               decodeBitFuncType       <= BITFUNC_SIGNED;
                            
                            when 16#2B# => -- SLTU
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_BIT;
                               decodeBitFuncType       <= BITFUNC_UNSIGNED;
                               
-                           when 16#2C# => -- DADD        
+                           when 16#2C# => -- DADD 
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_ADD;
+                              decodeExcType           <= EXCTYPE_DADD;
+                              decodeExcCode           <= x"C";
                   
                            when 16#2D# => -- DADDU
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_ADD;  
                               
                            when 16#2E# => -- DSUB
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SUB;
+                              decodeExcType           <= EXCTYPE_DSUB;
+                              decodeExcCode           <= x"C";
                               
                            when 16#2F# => -- DSUBU
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SUB;
                   
+                           when 16#30# => -- TGE
+                              decodeExcType  <= EXCTYPE_TRAPS0;
+                              decodeExcCode  <= x"D";
+                              
+                           when 16#31# => -- TGEU
+                              decodeExcType  <= EXCTYPE_TRAPU0;
+                              decodeExcCode  <= x"D";
+                              
+                           when 16#32# => -- TLT
+                              decodeExcType  <= EXCTYPE_TRAPS1;
+                              decodeExcCode  <= x"D";
+                              
+                           when 16#33# => -- TLTU
+                              decodeExcType  <= EXCTYPE_TRAPU1;
+                              decodeExcCode  <= x"D";
+                              
+                           when 16#34# => -- TEQ
+                              decodeExcType  <= EXCTYPE_TRAPE1;
+                              decodeExcCode  <= x"D";
+                              
+                           when 16#36# => -- TNE
+                              decodeExcType  <= EXCTYPE_TRAPE0;
+                              decodeExcCode  <= x"D";
+                  
                            when 16#38# => -- DSLL
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTLEFT;
                               decodeShiftAmountType   <= "00"; 
                   
                            when 16#3A# => -- DSRL
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftAmountType   <= "00"; 
                               
                            when 16#3B# => -- DSRA
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftAmountType   <= "00"; 
                               decodeShiftSigned       <= '1';
                               
                            when 16#3C# => -- DSLL + 32
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTLEFT;
                               decodeShiftAmountType   <= "00"; 
                               decodeShamt(5)          <= '1';
                               
                            when 16#3E# => -- DSRL + 32
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftAmountType   <= "00"; 
                               decodeShamt(5)          <= '1';
                               
                            when 16#3F# => -- DSRA + 32
+                              decodeResultWriteEnable <= '1';
                               decodeResultMux         <= RESULTMUX_SHIFTRIGHT;
                               decodeShiftAmountType   <= "00"; 
                               decodeShamt(5)          <= '1';
                               decodeShiftSigned       <= '1';
 
-                           when others => null;
+                           when others =>
+                              decodeExcType  <= EXCTYPE_DECODE;
+                              decodeExcCode  <= x"A";
+                           
                         end case;
   
                      when 16#01# => 
+                        decodeResultMux      <= RESULTMUX_PC;
+                        decodeTarget         <= to_unsigned(31, 5);
                         if (decSource2(3) = '1') then -- Traps
-                           null;
+                           case (decSource2(2 downto 0)) is
+                              when 3x"0" => -- TGEI
+                                 decodeExcType  <= EXCTYPE_TRAPIS0;
+                                 decodeExcCode  <= x"D";
+                                 
+                              when 3x"1" => -- TGEIU
+                                 decodeExcType  <= EXCTYPE_TRAPIU0;
+                                 decodeExcCode  <= x"D";
+                                 
+                              when 3x"2" => -- TLTI
+                                 decodeExcType  <= EXCTYPE_TRAPIS1;
+                                 decodeExcCode  <= x"D";
+                                 
+                              when 3x"3" => -- TLTIU
+                                 decodeExcType  <= EXCTYPE_TRAPIU1;
+                                 decodeExcCode  <= x"D";
+                                 
+                              when 3x"4" => -- TEQI
+                                 decodeExcType  <= EXCTYPE_TRAPIE1;
+                                 decodeExcCode  <= x"D";
+                                 
+                              when 3x"6" => -- TNEI
+                                 decodeExcType  <= EXCTYPE_TRAPIE0;
+                                 decodeExcCode  <= x"D";
+                              
+                              when others =>
+                                 decodeExcType  <= EXCTYPE_DECODE;
+                                 decodeExcCode  <= x"A";
+                                 
+                           end case;
+                           
                         else -- B: BLTZ, BGEZ, BLTZAL, BGEZAL
                            if (decSource2(4) = '1') then
-                              decodeResultMux      <= RESULTMUX_PC;
-                              decodeTarget         <= to_unsigned(31, 5);
+                              decodeResultWriteEnable <= '1';
                            end if;
                            if (decSource2(0) = '1') then
                               decodeBranchType     <= BRANCH_BRANCH_BGEZ;
@@ -1321,6 +1526,7 @@ begin
                         decodeBranchType        <= BRANCH_JUMPIMM;
                
                      when 16#03# => -- JAL
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_PC;
                         decodeTarget            <= to_unsigned(31, 5);
                         decodeBranchType        <= BRANCH_JUMPIMM;
@@ -1338,44 +1544,97 @@ begin
                         decodeBranchType        <= BRANCH_BRANCH_BGTZ;
                         
                      when 16#08# => -- ADDI
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_ADD;
                         decodeResult32          <= '1';
                         decodeUseImmidateValue2 <= '1';
+                        decodeExcType           <= EXCTYPE_ADDI;
+                        decodeExcCode           <= x"C";
             
                      when 16#09# => -- ADDIU
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_ADD;
                         decodeResult32          <= '1';
                         decodeUseImmidateValue2 <= '1';
                         
                      when 16#0A# => -- SLTI
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_BIT;
                         decodeBitFuncType       <= BITFUNC_IMM_SIGNED;   
                         
                      when 16#0B# => -- SLTIU
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_BIT;
                         decodeBitFuncType       <= BITFUNC_IMM_UNSIGNED; 
                         
                      when 16#0C# => -- ANDI
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_AND;
                         decodeUseImmidateValue2 <= '1';
                         
                      when 16#0D# => -- ORI
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_OR;
                         decodeUseImmidateValue2 <= '1';
                         
                      when 16#0E# => -- XORI
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_XOR;
                         decodeUseImmidateValue2 <= '1';
                         
                      when 16#0F# => -- LUI
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_LUI;
                         
                      when 16#10# => -- COP0
                         blockIRQ <= '1';
-                        if (decSource1(4) = '1' and decImmData(6 downto 0) = 16#18#) then -- ERET
-                           decodeBranchType     <= BRANCH_ERET;
-                        end if;                     
-                        
+                        if (decSource1(4) = '1') then
+                           case (to_integer(decImmData(5 downto 0))) is
+                              when 1 =>
+                                 report "TLBR command not implemented" severity warning;
+                                 error_instr     <= '1';                           
+                                 
+                              when 2 | 6 =>
+                                 report "TLBWI and TLBWR command not implemented" severity warning; 
+                                 if (to_integer(decodeImmData(5 downto 0)) = 6) then --TLBWR
+                                    error_instr     <= '1';
+                                 end if;
+      
+                              when 8 =>
+                                 report "TLBP command not implemented" severity warning;     
+                                 error_instr     <= '1';
+      
+                              when 16#18# => -- ERET
+                                 decodeBranchType <= BRANCH_ERET;
+                                 --EXEllBit       <= '0';
+                                 --EXEERET        <= '1';
+                                 
+                              when others => null;
+                                 
+                           end case;
+                        else
+                           --case (to_integer(decSource1(3 downto 0))) is
+                           --
+                           --   when 0 => -- mfc0
+                           --      EXECOP0ReadEnable  <= '1';
+                           --      EXECOP0Read64      <= '0';
+                           --                        
+                           --   when 1 => -- dmfc0
+                           --      EXECOP0ReadEnable  <= '1';
+                           --      EXECOP0Read64      <= '1';
+                           --
+                           --   when 4 => -- mtc0
+                           --      exeCOP0WriteEnable <= '1';
+                           --      exeCOP0WriteValue  <= unsigned(resize(signed(value2(31 downto 0)), 64));
+                           --      
+                           --   when 5 => -- dmtc0
+                           --      exeCOP0WriteEnable <= '1';
+                           --   
+                           --   when others => null;
+                           --      
+                           --end case;
+                        end if;
+
                      when 16#11# => -- COP1
                         decodeResultMux         <= RESULTMUX_FPU;
                         if (decSource1(4) = '1') then -- FPU execute
@@ -1388,7 +1647,7 @@ begin
                            decodeFPUTarget         <= decRD;
                            decodeFPUTransferEnable <= COP1_enable;
                            if (decSource1(3 downto 0) < 3) then
-                              decodeFPUTransferWrite <= '1';
+                              decodeResultWriteEnable <= '1';
                            end if;
                            if (decSource1(3 downto 0) = x"8") then
                               decodeBranchType   <= BRANCH_BC1;
@@ -1396,6 +1655,26 @@ begin
                               if (decSource2(1) = '1') then blockIRQ <= '1'; end if;
                            end if;
                         end if;
+                        if (COP1_enable = '0' or (decSource1(4) = '0' and decSource1(3 downto 0) > 8)) then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"B";
+                           decodeExcCOP            <= "01";
+                        end if;
+                       
+                     when 16#12# => -- COP2
+                        if (COP2_enable = '0') then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"B";
+                           decodeExcCOP            <= "10";
+                        elsif (decSource1 = 3 or decSource1 = 7) then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"A";
+                           decodeExcCOP            <= "10";
+                        end if;
+
+                     when 16#13# => -- COP3 -> does not exist
+                        decodeExcType           <= EXCTYPE_DECODE;
+                        decodeExcCode           <= x"A";
                         
                      when 16#14# => -- BEQL
                         decodeBranchType        <= BRANCH_BRANCH_BEQ;
@@ -1418,22 +1697,211 @@ begin
                         blockIRQ                <= '1';
                         
                      when 16#18# => -- DADDI   
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_ADD;
                         decodeUseImmidateValue2 <= '1';
+                        decodeExcType           <= EXCTYPE_DADDI;
+                        decodeExcCode           <= x"C";
             
                      when 16#19# => -- DADDIU 
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_ADD;
                         decodeUseImmidateValue2 <= '1';
                         
-                     when 16#38# => -- SC
-                        decodeResultMux         <= RESULTMUX_BIT;
-                        decodeBitFuncType       <= BITFUNC_SC;
+                     when 16#1A# => -- LDL
+                        decodeMemReadEnable     <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeLoadType          <= LOADTYPE_LEFT64;
+               
+                     when 16#1B# => -- LDR
+                        decodeMemReadEnable     <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeLoadType          <= LOADTYPE_RIGHT64;
+         
+                     when 16#20# => -- LB
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_SBYTE;
                         
-                     when 16#3C# => -- SCD 
+                     when 16#21# => -- LH
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_SWORD;
+                        decodeExcType           <= EXCTYPE_ADDRH;
+                        decodeExcCode           <= x"4";
+
+                     when 16#22# => -- LWL
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_LEFT;
+
+                     when 16#23# => -- LW
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_DWORD;
+                        decodeExcType           <= EXCTYPE_ADDRW;
+                        decodeExcCode           <= x"4";
+                        
+                     when 16#24# => -- LBU
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_BYTE;
+               
+                     when 16#25# => -- LHU
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_WORD;
+                        decodeExcType           <= EXCTYPE_ADDRH;
+                        decodeExcCode           <= x"4";
+                        
+                     when 16#26# => -- LWR
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_RIGHT;
+               
+                     when 16#27# => -- LWU
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_DWORDU;
+                        decodeExcType           <= EXCTYPE_ADDRW;
+                        decodeExcCode           <= x"4";
+                        
+                     when 16#28# => -- SB
+                        decodeMemWriteEnable    <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_BYTE;
+               
+                     when 16#29# => -- SH
+                        decodeMemWriteEnable    <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_HALF;
+                        decodeExcType           <= EXCTYPE_ADDRH;
+                        decodeExcCode           <= x"5";
+                        
+                     when 16#2A# => -- SWL
+                        decodeMemWriteEnable    <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_SWL;
+               
+                     when 16#2B# => -- SW
+                        decodeMemWriteEnable    <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_WORD;
+                        decodeExcType           <= EXCTYPE_ADDRW;
+                        decodeExcCode           <= x"5";
+
+                     when 16#2C# => -- SDL
+                        decodeMemWriteEnable    <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_SDL;
+
+                     when 16#2D# => -- SDR
+                        decodeMemWriteEnable    <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_SDR;
+                        
+                     when 16#2E# => -- SWR
+                        decodeMemWriteEnable    <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_SWR;
+                        
+                     when 16#2F# => -- Cache
+                        null;
+
+                     when 16#30# => -- LL
+                        decodeMemReadEnable     <= '1';
+                        decodeLoadType          <= LOADTYPE_DWORD;
+                        decodeExcType           <= EXCTYPE_ADDRW;
+                        decodeExcCode           <= x"4";
+
+                     when 16#31# => -- LWC1
+                        decodeLoadType          <= LOADTYPE_DWORD;
+                        if (COP1_enable = '0') then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"B";
+                           decodeExcCOP            <= "01";
+                        else
+                           decodeMemReadEnable     <= '1';
+                        end if;
+
+                     when 16#32# => -- LWC2 -> NOP
+                        null;
+                        
+                     when 16#33# => -- LWC3 -> NOP
+                        null;
+
+                     when 16#34# => -- LLD 
+                        decodeMemReadEnable     <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeLoadType          <= LOADTYPE_QWORD;
+                        decodeExcType           <= EXCTYPE_ADDRD;
+                        decodeExcCode           <= x"4";
+
+                     when 16#35# => -- LDC1 
+                        decodeMem64Bit          <= '1';
+                        decodeLoadType          <= LOADTYPE_QWORD;
+                        if (COP1_enable = '0') then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"B";
+                           decodeExcCOP            <= "01";
+                        else
+                           decodeMemReadEnable     <= '1';
+                        end if;
+
+                     when 16#37# => -- LD
+                        decodeMemReadEnable     <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeLoadType          <= LOADTYPE_QWORD;
+                        decodeExcType           <= EXCTYPE_ADDRD;
+                        decodeExcCode           <= x"4";              
+               
+                     when 16#38# => -- SC
+                        decodeResultWriteEnable <= '1';
                         decodeResultMux         <= RESULTMUX_BIT;
                         decodeBitFuncType       <= BITFUNC_SC;
+                        decodeMemWriteLL        <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_WORD;
+                        decodeExcType           <= EXCTYPE_ADDRW;
+                        decodeExcCode           <= x"5";
+               
+                     when 16#39# => -- SWC1 
+                        if (fpuRegMode = '0' and decSource2(0) = '1') then
+                           decodeMemWriteType <= MEMWRITETYPE_COP1H;
+                        else
+                           decodeMemWriteType <= MEMWRITETYPE_COP1L;
+                        end if;
+                        if (COP1_enable = '0') then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"B";
+                           decodeExcCOP            <= "01";
+                        else
+                           decodeMemWriteEnable    <= '1';
+                        end if;  
+                        
+                     when 16#3A# => -- SWC2 -> NOP
+                        null;
+                        
+                     when 16#3B# => -- SWC3 -> NOP
+                        null;
+   
+                     when 16#3C# => -- SCD 
+                        decodeResultWriteEnable <= '1';
+                        decodeResultMux         <= RESULTMUX_BIT;
+                        decodeBitFuncType       <= BITFUNC_SC;
+                        decodeMemWriteLL        <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_DWORD;
+                        decodeExcType           <= EXCTYPE_ADDRD;
+                        decodeExcCode           <= x"5";
+               
+                     when 16#3D# => -- SDC1 
+                        decodeMem64Bit          <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_COP1D;
+                        if (COP1_enable = '0') then
+                           decodeExcType           <= EXCTYPE_DECODE;
+                           decodeExcCode           <= x"B";
+                           decodeExcCOP            <= "01";
+                        else
+                           decodeMemWriteEnable    <= '1';
+                        end if;
+               
+                     when 16#3F# => -- SD
+                        decodeMemWriteEnable    <= '1';
+                        decodeMem64Bit          <= '1';
+                        decodeMemWriteType      <= MEMWRITETYPE_DWORD;
+                        decodeExcType           <= EXCTYPE_ADDRD;
+                        decodeExcCode           <= x"5";
                      
-                     when others => null;   
+                     when others =>
+                        decodeExcType  <= EXCTYPE_DECODE;
+                        decodeExcCode  <= x"A";                     
                      
                   end case;
                   
@@ -1600,32 +2068,50 @@ begin
    resultDataMuxed64(31 downto 0) <= resultDataMuxed(31 downto 0);
    resultDataMuxed64(63 downto 32) <= (others => resultDataMuxed(31)) when decodeResult32 else resultDataMuxed(63 downto 32);
 
-   process (decodeImmData, decodeJumpTarget, decodeSource1, decodeSource2, decodeValue1, decodeValue2, decodeOP, decodeFunct, decodeShamt, decodeRD, 
-            exception, stall3, stall, value1, value2, pcOld0, resultData, eretPC, decodeFPUValue2, decodeFPUCommandEnable, decodeFPUTransferEnable, decodeFPUTransferWrite,
+   -- exceptions    
+   exceptionCode_3  <= decodeExcCode;
+   exception_COP    <= decodeExcCOP;
+   
+   exeExceptionMem <= '1' when (decodeExcType = EXCTYPE_ADDRH   and calcMemAddr(0) = '1') else
+                      '1' when (decodeExcType = EXCTYPE_ADDRW   and calcMemAddr(1 downto 0) > 0) else
+                      '1' when (decodeExcType = EXCTYPE_ADDRD   and calcMemAddr(2 downto 0) > 0) else
+                      '0';
+   
+   exceptionNew3  <= '0' when (exception = '1' or stall > 0 or executeIgnoreNext = '1' or decodeNew = '0') else
+                     '1' when (exeExceptionMem = '1') else
+                     '1' when (decodeExcType = EXCTYPE_DECODE) else
+                     '1' when (decodeExcType = EXCTYPE_PC      and value1(1 downto 0) > 0) else
+                     '1' when (decodeExcType = EXCTYPE_ADD     and (((calcResult_add(31) xor value1(31)) and (calcResult_add(31) xor value2(31))) = '1')) else
+                     '1' when (decodeExcType = EXCTYPE_DADD    and (((calcResult_add(63) xor value1(63)) and (calcResult_add(63) xor value2(63))) = '1')) else
+                     '1' when (decodeExcType = EXCTYPE_ADDI    and (((calcResult_add(31) xor value1(31)) and (calcResult_add(31) xor decodeImmData(15))) = '1')) else
+                     '1' when (decodeExcType = EXCTYPE_DADDI   and (((calcResult_add(63) xor value1(63)) and (calcResult_add(63) xor decodeImmData(15))) = '1')) else
+                     '1' when (decodeExcType = EXCTYPE_SUB     and (((calcResult_sub(31) xor value1(31)) and (value1(31) xor value2(31))) = '1')) else
+                     '1' when (decodeExcType = EXCTYPE_DSUB    and (((calcResult_sub(63) xor value1(63)) and (value1(63) xor value2(63))) = '1')) else
+                     '1' when (decodeExcType = EXCTYPE_TRAPU0  and calcResult_lesserUnsigned = '0') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPU1  and calcResult_lesserUnsigned = '1') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPS0  and calcResult_lesserSigned = '0') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPS1  and calcResult_lesserSigned = '1') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPE0  and cmpEqual = '0') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPE1  and cmpEqual = '1') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPIU0 and calcResult_lesserIMMUnsigned   = '0') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPIU1 and calcResult_lesserIMMUnsigned   = '1') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPIS0 and calcResult_lesserIMMSigned     = '0') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPIS1 and calcResult_lesserIMMSigned     = '1') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPIE0 and calcResult_equal               = '0') else
+                     '1' when (decodeExcType = EXCTYPE_TRAPIE1 and calcResult_equal               = '1') else
+                     '0';
+                     
+                     
+
+   process (decodeImmData, decodeJumpTarget, decodeSource1, decodeSource2, decodeValue1, decodeValue2, decodeOP, decodeShamt, decodeRD, 
+            exception, stall3, stall, value1, value2, pcOld0, resultData, eretPC, decodeFPUValue2, decodeFPUCommandEnable, decodeFPUTransferEnable,
             hi, lo, executeIgnoreNext, decodeNew, llBit, calcResult_add, calcResult_sub, calcMemAddr, COP1_enable, COP2_enable, cmpEqual, fpuRegMode,
             calcResult_lesserSigned, calcResult_lesserUnsigned, calcResult_lesserIMMSigned, calcResult_lesserIMMUnsigned, calcResult_equal)
       variable calcResult           : unsigned(63 downto 0);
-      variable rotatedData          : unsigned(63 downto 0) := (others => '0');
    begin
    
-      EXEerror_instr          <= '0';
-   
-      exceptionNew3           <= '0';
-      exception_COP           <= "00";
       EXEERET                 <= '0';
-      stallNew3               <= stall3;
-      EXEresultWriteEnable    <= '0';          
-      
-      rotatedData             := byteswap32(value2(63 downto 32)) & byteswap32(value2(31 downto 0));
-      EXEMem64Bit             <= '0';
-      EXEMemWriteEnable       <= '0';
-      EXEMemWriteData         <= rotatedData;
-      EXEMemWriteMask         <= "00000000";
-      EXEMemWriteException    <= '0';
-      
-      EXELoadType             <= LOADTYPE_DWORD;
-      EXEReadEnable           <= '0';
-      EXEReadException        <= '0';
+      stallNew3               <= stall3;         
       
       EXECacheEnable          <= '0';
       EXECacheAddr            <= calcMemAddr(28 downto 0);  
@@ -1642,21 +2128,7 @@ begin
       EXECOP2ReadEnable       <= '0';
       EXECOP2Read64           <= '0';
       
-      EXEcalcMULT             <= '0';
-      EXEcalcMULTU            <= '0';      
-      EXEcalcDMULT            <= '0';
-      EXEcalcDMULTU           <= '0';
-      EXEcalcDIV              <= '0';
-      EXEcalcDIVU             <= '0';
-      EXEcalcDDIV             <= '0';
-      EXEcalcDDIVU            <= '0';
-      
-      EXEhiUpdate             <= '0';
-      EXEloUpdate             <= '0';
-      
       EXEllBit                <= llBit;
-      
-      exceptionCode_3         <= x"0";
       
       FPU_command_ena         <= '0';
       FPU_TransferEna         <= '0';
@@ -1667,293 +2139,6 @@ begin
          FPU_TransferEna      <= decodeFPUTransferEnable;
              
          case (to_integer(decodeOP)) is
-         
-            when 16#00# =>
-               case (to_integer(decodeFunct)) is
-         
-                  when 16#00# | 16#04# => -- SLL | SLLV
-                     EXEresultWriteEnable <= '1';
-
-                  when 16#02# | 16#03# | 16#06# | 16#07# => -- SRL | SRA | SRLV | SRAV
-                     EXEresultWriteEnable <= '1';               
-                    
-                  when 16#08# => -- JR        
-                     if (value1(1 downto 0) > 0) then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"4";
-                     end if;
-                    
-                  when 16#09# => -- JALR        
-                     EXEresultWriteEnable <= '1';
-                     if (value1(1 downto 0) > 0) then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"4";
-                     end if;
-
-                  when 16#0C# => -- SYSCALL
-                     exceptionNew3   <= '1';
-                     exceptionCode_3 <= x"8";
-                     
-                  when 16#0D# => -- BREAK
-                     exceptionNew3   <= '1';
-                     exceptionCode_3 <= x"9";
-                     
-                  when 16#0F# => -- SYNC
-                     null;
-
-                  when 16#10# => -- MFHI
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#11# => -- MTHI
-                     EXEhiUpdate <= '1';
-                     
-                  when 16#12# => -- MFLO
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#13# => -- MTLO
-                     EXEloUpdate <= '1';
-                     
-                  when 16#14# | 16#38# | 16#3C# => -- DSLLV | DSLL | DSLL + 32
-                     EXEresultWriteEnable <= '1'; 
-                     
-                  when 16#16# | 16#17# | 16#3A# | 16#3B# | 16#3E# | 16#3F# => -- DSRLV | DSRAV | DSRL | DSRA | DSRL + 32 | DSRA + 32
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#18# => -- MULT
-                     EXEcalcMULT <= '1';
-                     
-                  when 16#19# => -- MULTU
-                     EXEcalcMULTU <= '1';
-                     
-                  when 16#1A# => -- DIV
-                     EXEcalcDIV <= '1';
-                     
-                  when 16#1B# => -- DIVU
-                     EXEcalcDIVU <= '1';
-                     
-                  when 16#1C# => -- DMULT
-                     EXEcalcDMULT <= '1';                
-                     
-                  when 16#1D# => -- DMULTU
-                     EXEcalcDMULTU <= '1';                  
-                     
-                  when 16#1E# => -- DDIV
-                     EXEcalcDDIV <= '1';             
-                     
-                  when 16#1F# => -- DDIVU
-                     EXEcalcDDIVU <= '1';
-                  
-                  when 16#20# => -- ADD        
-                     if (((calcResult_add(31) xor value1(31)) and (calcResult_add(31) xor value2(31))) = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"C";
-                     else
-                        EXEresultWriteEnable <= '1';
-                     end if;
-                  
-                  when 16#21# => -- ADDU
-                     EXEresultWriteEnable <= '1';
-                    
-                  when 16#22# => -- SUB         
-                     if (((calcResult_sub(31) xor value1(31)) and (value1(31) xor value2(31))) = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"C";
-                     else
-                        EXEresultWriteEnable <= '1';
-                     end if;
-                  
-                  when 16#23# => -- SUBU
-                     EXEresultWriteEnable <= '1';
-                  
-                  when 16#24# => -- AND
-                     EXEresultWriteEnable <= '1';
-                    
-                  when 16#25# => -- OR
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#26# => -- XOR
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#27# => -- NOR
-                     EXEresultWriteEnable <= '1';
-                  
-                  when 16#2A# => -- SLT
-                     EXEresultWriteEnable <= '1'; 
-                   
-                  when 16#2B# => -- SLTU
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#2C# => -- DADD        
-                     if (((calcResult_add(63) xor value1(63)) and (calcResult_add(63) xor value2(63))) = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"C";
-                     else
-                        EXEresultWriteEnable <= '1';
-                     end if; 
-                  
-                  when 16#2D# => -- DADDU
-                     EXEresultWriteEnable <= '1';                
-                     
-                  when 16#2E# => -- DSUB            
-                     if (((calcResult_sub(63) xor value1(63)) and (value1(63) xor value2(63))) = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"C";
-                     else
-                        EXEresultWriteEnable <= '1';
-                     end if;
-                     
-                  when 16#2F# => -- DSUBU
-                     EXEresultWriteEnable <= '1';
-                     
-                  when 16#30# => -- TGE
-                     if (calcResult_lesserSigned = '0') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"D";
-                     end if;
-                     
-                  when 16#31# => -- TGEU
-                     if (calcResult_lesserUnsigned = '0') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"D";
-                     end if;
-                     
-                  when 16#32# => -- TLT
-                     if (calcResult_lesserSigned = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"D";
-                     end if;
-                     
-                  when 16#33# => -- TLTU
-                     if (calcResult_lesserUnsigned = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"D";
-                     end if;
-                     
-                  when 16#34# => -- TEQ
-                     if (cmpEqual = '1') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"D";
-                     end if;
-                     
-                  when 16#36# => -- TNE
-                     if (cmpEqual = '0') then
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"D";
-                     end if;
-                     
-                  -- 16#38# | 16#3C# | 16#3A# | 16#3B# | 16#3E# | 16#3F# => covered at 16#14#
-                     
-                  when others => 
-                  -- synthesis translate_off
-                     report to_hstring(decodeFunct);
-                  -- synthesis translate_on
-                     --report "Unknown extended opcode" severity failure; 
-                     exceptionNew3   <= '1';
-                     exceptionCode_3 <= x"A";
-                     EXEerror_instr  <= '1';
-                     
-               end case;
-               
-            when 16#01# => 
-               if (decodeSource2(3) = '1') then -- Traps
-                  case (decodeSource2(2 downto 0)) is
-                     when 3x"0" => -- TGEI
-                        if (calcResult_lesserIMMSigned = '0') then
-                           exceptionNew3   <= '1';
-                           exceptionCode_3 <= x"D";
-                        end if;
-                        
-                     when 3x"1" => -- TGEIU
-                        if (calcResult_lesserIMMUnsigned = '0') then
-                           exceptionNew3   <= '1';
-                           exceptionCode_3 <= x"D";
-                        end if;
-                        
-                     when 3x"2" => -- TLTI
-                        if (calcResult_lesserIMMSigned = '1') then
-                           exceptionNew3   <= '1';
-                           exceptionCode_3 <= x"D";
-                        end if;
-                        
-                     when 3x"3" => -- TLTIU
-                        if (calcResult_lesserIMMUnsigned = '1') then
-                           exceptionNew3   <= '1';
-                           exceptionCode_3 <= x"D";
-                        end if;
-                        
-                     when 3x"4" => -- TEQI
-                        if (calcResult_equal = '1') then
-                           exceptionNew3   <= '1';
-                           exceptionCode_3 <= x"D";
-                        end if;
-                        
-                     when 3x"6" => -- TNEI
-                        if (calcResult_equal = '0') then
-                           exceptionNew3   <= '1';
-                           exceptionCode_3 <= x"D";
-                        end if;
-                     
-                     when others =>
-                     -- synthesis translate_off
-                        report to_hstring(decodeFunct);
-                     -- synthesis translate_on
-                        --report "Unknown traps opcode" severity failure; 
-                        exceptionNew3   <= '1';
-                        exceptionCode_3 <= x"A";
-                        EXEerror_instr  <= '1';
-                  end case;
-               else -- B: BLTZ, BGEZ, BLTZAL, BGEZAL
-                  if (decodeSource2(4) = '1') then
-                     EXEresultWriteEnable <= '1';
-                  end if;
-               end if;
-               
-            when 16#02# => -- J
-               null;            
-               
-            when 16#03# => -- JAL         
-               EXEresultWriteEnable <= '1';
-               
-            when 16#04# => -- BEQ
-               null;
-            
-            when 16#05# => -- BNE
-               null;
-            
-            when 16#06# => -- BLEZ
-               null;
-               
-            when 16#07# => -- BGTZ
-               null;
-            
-            when 16#08# => -- ADDI             
-               if (((calcResult_add(31) xor value1(31)) and (calcResult_add(31) xor decodeImmData(15))) = '1') then
-                  exceptionNew3   <= '1';
-                  exceptionCode_3 <= x"C";
-               else
-                  EXEresultWriteEnable <= '1';
-               end if;
-            
-            when 16#09# => -- ADDIU          
-               EXEresultWriteEnable <= '1';
-               
-            when 16#0A# => -- SLTI
-               EXEresultWriteEnable <= '1';
-               
-            when 16#0B# => -- SLTIU
-               EXEresultWriteEnable <= '1';
-
-            when 16#0C# => -- ANDI
-               EXEresultWriteEnable <= '1';
-               
-            when 16#0D# => -- ORI
-               EXEresultWriteEnable <= '1';
-               
-            when 16#0E# => -- XORI
-               EXEresultWriteEnable <= '1';
-               
-            when 16#0F# => -- LUI
-               EXEresultWriteEnable <= '1';
                
             when 16#10# => -- COP0
                --if (cop0_SR(1) = '1' and cop0_SR(28) = '0') then
@@ -1962,27 +2147,12 @@ begin
                --else
                   if (decodeSource1(4) = '1') then
                      case (to_integer(decodeImmData(5 downto 0))) is
-                        when 1 =>
-                           report "TLBR command not implemented" severity warning;
-                           EXEerror_instr     <= '1';                           
-                           
-                        when 2 | 6 =>
-                           report "TLBWI and TLBWR command not implemented" severity warning; 
-                           if (to_integer(decodeImmData(5 downto 0)) = 6) then --TLBWR
-                              EXEerror_instr     <= '1';
-                           end if;
-
-                        when 8 =>
-                           report "TLBP command not implemented" severity warning;     
-                           EXEerror_instr     <= '1';
-
+                        
                         when 16#18# => -- ERET
                            EXEllBit       <= '0';
                            EXEERET        <= '1';
                            
-                        when others => 
-                           report "should not happen" severity failure; 
-                           EXEerror_instr  <= '1';
+                        when others => null;
                            
                      end case;
                   else
@@ -2003,28 +2173,15 @@ begin
                         when 5 => -- dmtc0
                            exeCOP0WriteEnable <= '1';
                          
-                        when others => 
-                           report "should not happen" severity failure; 
-                           EXEerror_instr     <= '1';
+                        when others => null;
                            
                      end case;
                   end if;
                --end if;
                
-            when 16#11# => -- COP1
-               if (COP1_enable = '0' or (decodeSource1(4) = '0' and decodeSource1(3 downto 0) > 8)) then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"B";
-                  exception_COP    <= "01";
-               else  
-                  EXEresultWriteEnable <= decodeFPUTransferWrite;
-               end if;
-               
             when 16#12# => -- COP2
                if (COP2_enable = '0') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"B";
-                  exception_COP    <= "10";
+
                else  
                   case (to_integer(decodeSource1)) is
                   
@@ -2038,208 +2195,30 @@ begin
                      when 4 | 5 | 6 =>
                         EXECOP2WriteEnable <= '1';
                   
-                     when others =>
-                        exceptionNew3    <= '1';
-                        exceptionCode_3  <= x"A";
-                        exception_COP    <= "10";
+                     when others => null;
                         
                   end case;
                end if;
                
-            when 16#13# => -- COP3 -> does not exist
-               exceptionNew3    <= '1';
-               exceptionCode_3  <= x"A";
-               
-            when 16#14# => -- BEQL
-               null;
-               
-            when 16#15# => -- BNEL
-               null;
-               
-            when 16#16# => -- BLEZL
-               null;
-               
-            when 16#17# => -- BGTZL
-               null;
-
-            when 16#18# => -- DADDI             
-               if (((calcResult_add(63) xor value1(63)) and (calcResult_add(63) xor decodeImmData(15))) = '1') then
-                  exceptionNew3   <= '1';
-                  exceptionCode_3 <= x"C";
-               else
-                  EXEresultWriteEnable <= '1';
-               end if;
-            
-            when 16#19# => -- DADDIU           
-               EXEresultWriteEnable <= '1';
-               
             when 16#1A# => -- LDL
-               EXELoadType   <= LOADTYPE_LEFT64;
-               EXEReadEnable <= '1';
-               EXEMem64Bit   <= '1';
                EXECacheAddr(2 downto 0) <= "000";
                
             when 16#1B# => -- LDR
-               EXELoadType   <= LOADTYPE_RIGHT64;
-               EXEReadEnable <= '1';
-               EXEMem64Bit   <= '1';
                EXECacheAddr(2 downto 0) <= "000";
 
-            when 16#20# => -- LB
-               EXELoadType   <= LOADTYPE_SBYTE;
-               EXEReadEnable <= '1';
-               
-            when 16#21# => -- LH
-               EXELoadType <= LOADTYPE_SWORD;
-               if (calcMemAddr(0) = '1') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
-               else
-                  EXEReadEnable <= '1';
-               end if;  
-
             when 16#22# => -- LWL
-               EXELoadType   <= LOADTYPE_LEFT;
-               EXEReadEnable <= '1';
                EXECacheAddr(1 downto 0) <= "00";
-               
-            when 16#23# => -- LW
-               EXELoadType <= LOADTYPE_DWORD;
-               if (calcMemAddr(1 downto 0) /= "00") then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
-               else
-                  EXEReadEnable <= '1';
-               end if;  
-
-            when 16#24# => -- LBU
-               EXELoadType <= LOADTYPE_BYTE;
-               EXEReadEnable <= '1';
-
-            when 16#25# => -- LHU
-               EXELoadType <= LOADTYPE_WORD;
-               if (calcMemAddr(0) = '1') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
-               else
-                  EXEReadEnable <= '1';
-               end if; 
                
             when 16#26# => -- LWR
-               EXELoadType   <= LOADTYPE_RIGHT;
-               EXEReadEnable <= '1';
-               EXECacheAddr(1 downto 0) <= "00";
+               EXECacheAddr(1 downto 0) <= "00";          
 
-            when 16#27# => -- LWU
-               EXELoadType <= LOADTYPE_DWORDU;
-               if (calcMemAddr(1 downto 0) /= "00") then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
-               else
-                  EXEReadEnable <= '1';
-               end if;                
-
-            when 16#28# => -- SB
-               case (to_integer(calcMemAddr(1 downto 0))) is 
-                  when 0 => EXEMemWriteMask(3 downto 0) <= "0001"; EXEMemWriteData <= x"00000000" & x"000000" & rotatedData(31 downto 24); 
-                  when 1 => EXEMemWriteMask(3 downto 0) <= "0010"; EXEMemWriteData <= x"00000000" & x"0000" &   rotatedData(31 downto 16);   
-                  when 2 => EXEMemWriteMask(3 downto 0) <= "0100"; EXEMemWriteData <= x"00000000" & x"00" &     rotatedData(31 downto 8);   
-                  when 3 => EXEMemWriteMask(3 downto 0) <= "1000"; EXEMemWriteData <= x"00000000" &             rotatedData(31 downto 0);   
-                  when others => null;
-               end case;
-               EXEMemWriteEnable <= '1';
-
-            when 16#29# => -- SH
-               if (calcMemAddr(1) = '1') then
-                  EXEMemWriteMask(3 downto 0) <= "1100";
-               else
-                  EXEMemWriteData <= x"00000000" & x"0000" & rotatedData(31 downto 16);
-                  EXEMemWriteMask(3 downto 0) <= "0011";
-               end if;
-               if (calcMemAddr(0) = '1') then
-                  exceptionNew3        <= '1';
-                  exceptionCode_3      <= x"5";
-                  EXEMemWriteException <= '1';
-               else
-                  EXEMemWriteEnable <= '1';
-               end if;
-               
-            when 16#2A# => -- SWL
-               case (to_integer(calcMemAddr(1 downto 0))) is 
-                  when 0 => EXEMemWriteMask(3 downto 0) <= "1111"; EXEMemWriteData <= x"00000000" & rotatedData(31 downto 0);
-                  when 1 => EXEMemWriteMask(3 downto 0) <= "1110"; EXEMemWriteData <= x"00000000" & rotatedData(23 downto 0) & x"00";
-                  when 2 => EXEMemWriteMask(3 downto 0) <= "1100"; EXEMemWriteData <= x"00000000" & rotatedData(15 downto 0) & x"0000";
-                  when 3 => EXEMemWriteMask(3 downto 0) <= "1000"; EXEMemWriteData <= x"00000000" & rotatedData( 7 downto 0) & x"000000";
-                  when others => null;
-               end case;
-               EXEMemWriteEnable <= '1';   
-
-            when 16#2B# => -- SW
-               EXEMemWriteMask(3 downto 0) <= "1111";
-               if (calcMemAddr(1 downto 0) /= "00") then
-                  exceptionNew3        <= '1';
-                  exceptionCode_3      <= x"5";
-                  EXEMemWriteException <= '1';
-               else
-                  EXEMemWriteEnable <= '1';
-               end if;
-               
-            when 16#2C# => -- SDL
-               EXEMem64Bit   <= '1';
-               case (to_integer(calcMemAddr(2 downto 0))) is 
-                  when 0 => EXEMemWriteMask <= "11111111"; EXEMemWriteData <= rotatedData(63 downto 0);
-                  when 1 => EXEMemWriteMask <= "11101111"; EXEMemWriteData <= rotatedData(55 downto 0) & rotatedData(63 downto 56);
-                  when 2 => EXEMemWriteMask <= "11001111"; EXEMemWriteData <= rotatedData(47 downto 0) & rotatedData(63 downto 48);
-                  when 3 => EXEMemWriteMask <= "10001111"; EXEMemWriteData <= rotatedData(39 downto 0) & rotatedData(63 downto 40);
-                  when 4 => EXEMemWriteMask <= "00001111"; EXEMemWriteData <= rotatedData(31 downto 0) & rotatedData(63 downto 32);
-                  when 5 => EXEMemWriteMask <= "00001110"; EXEMemWriteData <= rotatedData(23 downto 0) & rotatedData(63 downto 24);
-                  when 6 => EXEMemWriteMask <= "00001100"; EXEMemWriteData <= rotatedData(15 downto 0) & rotatedData(63 downto 16);
-                  when 7 => EXEMemWriteMask <= "00001000"; EXEMemWriteData <= rotatedData( 7 downto 0) & rotatedData(63 downto 8);
-                  when others => null;
-               end case;
-               EXEMemWriteEnable <= '1';
-            
-            when 16#2D# => -- SDR
-               EXEMem64Bit   <= '1';
-               case (to_integer(calcMemAddr(2 downto 0))) is 
-                  when 0 => EXEMemWriteMask <= "00010000"; EXEMemWriteData <= rotatedData(55 downto 0) & rotatedData(63 downto 56);
-                  when 1 => EXEMemWriteMask <= "00110000"; EXEMemWriteData <= rotatedData(47 downto 0) & rotatedData(63 downto 48);
-                  when 2 => EXEMemWriteMask <= "01110000"; EXEMemWriteData <= rotatedData(39 downto 0) & rotatedData(63 downto 40);
-                  when 3 => EXEMemWriteMask <= "11110000"; EXEMemWriteData <= rotatedData(31 downto 0) & rotatedData(63 downto 32);
-                  when 4 => EXEMemWriteMask <= "11110001"; EXEMemWriteData <= rotatedData(23 downto 0) & rotatedData(63 downto 24);
-                  when 5 => EXEMemWriteMask <= "11110011"; EXEMemWriteData <= rotatedData(15 downto 0) & rotatedData(63 downto 16);
-                  when 6 => EXEMemWriteMask <= "11110111"; EXEMemWriteData <= rotatedData( 7 downto 0) & rotatedData(63 downto 8);
-                  when 7 => EXEMemWriteMask <= "11111111"; EXEMemWriteData <= rotatedData(63 downto 0);
-                  when others => null;
-               end case;
-               EXEMemWriteEnable <= '1';
-            
-               
-            when 16#2E# => -- SWR
-               case (to_integer(calcMemAddr(1 downto 0))) is 
-                  when 0 => EXEMemWriteMask(3 downto 0) <= "0001"; EXEMemWriteData <= x"00000000" & x"000000" & rotatedData(31 downto 24);
-                  when 1 => EXEMemWriteMask(3 downto 0) <= "0011"; EXEMemWriteData <= x"00000000" & x"0000" &   rotatedData(31 downto 16);
-                  when 2 => EXEMemWriteMask(3 downto 0) <= "0111"; EXEMemWriteData <= x"00000000" & x"00" &     rotatedData(31 downto  8);
-                  when 3 => EXEMemWriteMask(3 downto 0) <= "1111"; EXEMemWriteData <= x"00000000" &             rotatedData(31 downto  0);
-                  when others => null;
-               end case;
-               EXEMemWriteEnable <= '1';    
-            
             when 16#2F# => -- Cache
                EXECacheEnable <= '1';
             
             when 16#30# => -- LL
-               EXELoadType <= LOADTYPE_DWORD;
                if (calcMemAddr(1 downto 0) /= "00") then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
+
                else
-                  EXEReadEnable      <= '1';
                   EXEllBit           <= '1';
                   exeCOP0WriteEnable <= '1';
                   EXECOP0Register    <= to_unsigned(17,5);
@@ -2247,31 +2226,16 @@ begin
                end if; 
 
             when 16#31# => -- LWC1
-               EXELoadType <= LOADTYPE_DWORD;
                if (COP1_enable = '0') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"B";
-                  exception_COP    <= "01";
+
                else
                   ExeCOP1ReadEnable <= '1';
-                  EXEReadEnable     <= '1';
                end if;
 
-            when 16#32# => -- LWC2 -> NOP
-               null;
-               
-            when 16#33# => -- LWC3 -> NOP 
-               null; 
-
             when 16#34# => -- LLD 
-               EXELoadType <= LOADTYPE_QWORD;
-               EXEMem64Bit <= '1';
                if (calcMemAddr(2 downto 0) /= "000") then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
+
                else
-                  EXEReadEnable      <= '1';
                   EXEllBit           <= '1';
                   exeCOP0WriteEnable <= '1';
                   EXECOP0Register    <= to_unsigned(17,5);
@@ -2279,102 +2243,13 @@ begin
                end if;             
 
             when 16#35# => -- LDC1 
-               EXELoadType <= LOADTYPE_QWORD;
-               EXEMem64Bit <= '1';
                if (COP1_enable = '0') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"B";
-                  exception_COP    <= "01";
+
                else
                   ExeCOP1ReadEnable <= '1';
-                  EXEReadEnable     <= '1';
                end if;
-
-            when 16#37# => -- LD
-               EXELoadType <= LOADTYPE_QWORD;
-               EXEMem64Bit <= '1';
-               if (calcMemAddr(2 downto 0) /= "000") then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"4";
-                  EXEReadException <= '1';
-               else
-                  EXEReadEnable <= '1';
-               end if;                 
-               
-            when 16#38# => -- SC
-               EXEMemWriteMask(3 downto 0) <= "1111";
-               if (calcMemAddr(1 downto 0) /= "00") then
-                  exceptionNew3        <= '1';
-                  exceptionCode_3      <= x"5";
-                  EXEMemWriteException <= '1';
-               else
-                  EXEresultWriteEnable <= '1';
-                  EXEMemWriteEnable    <= llBit;
-               end if;
-               
-            when 16#39# => -- SWC1 
-               EXEMemWriteMask(3 downto 0) <= "1111";
-               if (COP1_enable = '0') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"B";
-                  exception_COP    <= "01";
-               else
-                  EXEMemWriteEnable            <= '1';
-                  EXEMemWriteData(31 downto 0) <= byteswap32(decodeFPUValue2(31 downto 0));
-                  if (fpuRegMode = '0' and decodeSource2(0) = '1') then
-                     EXEMemWriteData(31 downto 0) <= byteswap32(decodeFPUValue2(63 downto 32));
-                  end if;
-               end if;
-               
-            when 16#3A# => -- SWC2 -> nop
-               null;
-               
-            when 16#3B# => -- SWC3 -> NOP 
-               null; 
-               
-            when 16#3C# => -- SCD 
-               EXEMem64Bit     <= '1';
-               EXEMemWriteMask <= "11111111";
-               if (calcMemAddr(2 downto 0) /= "000") then
-                  exceptionNew3        <= '1';
-                  exceptionCode_3      <= x"5";
-                  EXEMemWriteException <= '1';
-               else
-                  EXEresultWriteEnable <= '1';
-                  EXEMemWriteEnable    <= llBit;
-               end if;          
-               
-            when 16#3D# => -- SDC1 
-               EXEMem64Bit     <= '1';
-               EXEMemWriteMask <= "11111111";
-               if (COP1_enable = '0') then
-                  exceptionNew3    <= '1';
-                  exceptionCode_3  <= x"B";
-                  exception_COP    <= "01";
-               else
-                  EXEMemWriteEnable <= '1';
-                  EXEMemWriteData   <= byteswap32(decodeFPUValue2(63 downto 32)) & byteswap32(decodeFPUValue2(31 downto 0));
-               end if;
-               
-            when 16#3F# => -- SD
-               EXEMem64Bit     <= '1';
-               EXEMemWriteMask <= "11111111";
-               if (calcMemAddr(2 downto 0) /= "00") then
-                  exceptionNew3        <= '1';
-                  exceptionCode_3      <= x"5";
-                  EXEMemWriteException <= '1';
-               else
-                  EXEMemWriteEnable <= '1';
-               end if;
-               
-            when others => 
-               -- synthesis translate_off
-               report to_hstring(decodeOP);
-               -- synthesis translate_on
-               --report "Unknown opcode" severity failure; 
-               exceptionNew3   <= '1';
-               exceptionCode_3 <= x"A";
-               EXEerror_instr  <= '1';
+ 
+            when others => null;
          
          end case;
              
@@ -2383,12 +2258,105 @@ begin
    end process;
    
    
+   process (all)
+      variable rotatedData          : unsigned(63 downto 0) := (others => '0');
+   begin
+   
+      rotatedData             := byteswap32(value2(63 downto 32)) & byteswap32(value2(31 downto 0));
+      EXEMemWriteData         <= rotatedData;
+      EXEMemWriteMask         <= "00000000";
+      
+      case (decodeMemWriteType) is
+      
+         when MEMWRITETYPE_BYTE =>
+            case (to_integer(calcMemAddr(1 downto 0))) is 
+               when 0 => EXEMemWriteMask(3 downto 0) <= "0001"; EXEMemWriteData <= x"00000000" & x"000000" & rotatedData(31 downto 24); 
+               when 1 => EXEMemWriteMask(3 downto 0) <= "0010"; EXEMemWriteData <= x"00000000" & x"0000" &   rotatedData(31 downto 16);   
+               when 2 => EXEMemWriteMask(3 downto 0) <= "0100"; EXEMemWriteData <= x"00000000" & x"00" &     rotatedData(31 downto 8);   
+               when 3 => EXEMemWriteMask(3 downto 0) <= "1000"; EXEMemWriteData <= x"00000000" &             rotatedData(31 downto 0);   
+               when others => null;
+            end case;
+
+         when MEMWRITETYPE_HALF =>
+            if (calcMemAddr(1) = '1') then
+               EXEMemWriteMask(3 downto 0) <= "1100";
+            else
+               EXEMemWriteData <= x"00000000" & x"0000" & rotatedData(31 downto 16);
+               EXEMemWriteMask(3 downto 0) <= "0011";
+            end if;
+               
+         when MEMWRITETYPE_WORD =>
+            EXEMemWriteMask(3 downto 0) <= "1111";
+               
+         when MEMWRITETYPE_SWL =>
+            case (to_integer(calcMemAddr(1 downto 0))) is 
+               when 0 => EXEMemWriteMask(3 downto 0) <= "1111"; EXEMemWriteData <= x"00000000" & rotatedData(31 downto 0);
+               when 1 => EXEMemWriteMask(3 downto 0) <= "1110"; EXEMemWriteData <= x"00000000" & rotatedData(23 downto 0) & x"00";
+               when 2 => EXEMemWriteMask(3 downto 0) <= "1100"; EXEMemWriteData <= x"00000000" & rotatedData(15 downto 0) & x"0000";
+               when 3 => EXEMemWriteMask(3 downto 0) <= "1000"; EXEMemWriteData <= x"00000000" & rotatedData( 7 downto 0) & x"000000";
+               when others => null;
+            end case;  
+            
+         when MEMWRITETYPE_SWR =>
+            case (to_integer(calcMemAddr(1 downto 0))) is 
+               when 0 => EXEMemWriteMask(3 downto 0) <= "0001"; EXEMemWriteData <= x"00000000" & x"000000" & rotatedData(31 downto 24);
+               when 1 => EXEMemWriteMask(3 downto 0) <= "0011"; EXEMemWriteData <= x"00000000" & x"0000" &   rotatedData(31 downto 16);
+               when 2 => EXEMemWriteMask(3 downto 0) <= "0111"; EXEMemWriteData <= x"00000000" & x"00" &     rotatedData(31 downto  8);
+               when 3 => EXEMemWriteMask(3 downto 0) <= "1111"; EXEMemWriteData <= x"00000000" &             rotatedData(31 downto  0);
+               when others => null;
+            end case;  
+            
+         when MEMWRITETYPE_DWORD =>  
+            EXEMemWriteMask <= "11111111";  
+               
+         when MEMWRITETYPE_SDL =>
+            case (to_integer(calcMemAddr(2 downto 0))) is 
+               when 0 => EXEMemWriteMask <= "11111111"; EXEMemWriteData <= rotatedData(63 downto 0);
+               when 1 => EXEMemWriteMask <= "11101111"; EXEMemWriteData <= rotatedData(55 downto 0) & rotatedData(63 downto 56);
+               when 2 => EXEMemWriteMask <= "11001111"; EXEMemWriteData <= rotatedData(47 downto 0) & rotatedData(63 downto 48);
+               when 3 => EXEMemWriteMask <= "10001111"; EXEMemWriteData <= rotatedData(39 downto 0) & rotatedData(63 downto 40);
+               when 4 => EXEMemWriteMask <= "00001111"; EXEMemWriteData <= rotatedData(31 downto 0) & rotatedData(63 downto 32);
+               when 5 => EXEMemWriteMask <= "00001110"; EXEMemWriteData <= rotatedData(23 downto 0) & rotatedData(63 downto 24);
+               when 6 => EXEMemWriteMask <= "00001100"; EXEMemWriteData <= rotatedData(15 downto 0) & rotatedData(63 downto 16);
+               when 7 => EXEMemWriteMask <= "00001000"; EXEMemWriteData <= rotatedData( 7 downto 0) & rotatedData(63 downto 8);
+               when others => null;
+            end case;
+            
+         when MEMWRITETYPE_SDR =>
+            case (to_integer(calcMemAddr(2 downto 0))) is 
+               when 0 => EXEMemWriteMask <= "00010000"; EXEMemWriteData <= rotatedData(55 downto 0) & rotatedData(63 downto 56);
+               when 1 => EXEMemWriteMask <= "00110000"; EXEMemWriteData <= rotatedData(47 downto 0) & rotatedData(63 downto 48);
+               when 2 => EXEMemWriteMask <= "01110000"; EXEMemWriteData <= rotatedData(39 downto 0) & rotatedData(63 downto 40);
+               when 3 => EXEMemWriteMask <= "11110000"; EXEMemWriteData <= rotatedData(31 downto 0) & rotatedData(63 downto 32);
+               when 4 => EXEMemWriteMask <= "11110001"; EXEMemWriteData <= rotatedData(23 downto 0) & rotatedData(63 downto 24);
+               when 5 => EXEMemWriteMask <= "11110011"; EXEMemWriteData <= rotatedData(15 downto 0) & rotatedData(63 downto 16);
+               when 6 => EXEMemWriteMask <= "11110111"; EXEMemWriteData <= rotatedData( 7 downto 0) & rotatedData(63 downto 8);
+               when 7 => EXEMemWriteMask <= "11111111"; EXEMemWriteData <= rotatedData(63 downto 0);
+               when others => null;
+            end case;
+         
+         when MEMWRITETYPE_COP1L =>         
+            EXEMemWriteMask(3 downto 0) <= "1111";
+            EXEMemWriteData(31 downto 0) <= byteswap32(decodeFPUValue2(31 downto 0));
+                  
+         when MEMWRITETYPE_COP1H =>         
+            EXEMemWriteMask(3 downto 0) <= "1111";
+            EXEMemWriteData(31 downto 0) <= byteswap32(decodeFPUValue2(63 downto 32));
+               
+         when MEMWRITETYPE_COP1D =>    
+            EXEMemWriteMask <= "11111111";
+            EXEMemWriteData   <= byteswap32(decodeFPUValue2(63 downto 32)) & byteswap32(decodeFPUValue2(31 downto 0));
+
+      end case;
+
+   end process;
+   
+   
    process (clk93)
    begin
       if (rising_edge(clk93)) then
       
          DIVstart    <= '0';
-         error_instr <= '0';
       
          if (reset_93 = '1') then
          
@@ -2485,7 +2453,7 @@ begin
                resultData              <= resultDataMuxed64;    
                resultTarget            <= decodeTarget;
                   
-               executeMem64Bit         <= EXEMem64Bit;
+               executeMem64Bit         <= decodeMem64Bit;
                executeMemWriteData     <= EXEMemWriteData;             
                executeMemWriteMask     <= EXEMemWriteMask;             
                executeMemAddress       <= calcMemAddr; 
@@ -2522,8 +2490,6 @@ begin
                   else
                
                      executeNew                    <= '1';
-                     
-                     error_instr                   <= EXEerror_instr;
                
 -- synthesis translate_off
                      pcOld2                        <= pcOld1;  
@@ -2533,16 +2499,23 @@ begin
                      stall3                        <= stallNew3;
                            
                      -- from calculation
-                     if (decodeTarget = 0) then
+                     if (decodeTarget = 0 or exceptionNew3 = '1') then
                         resultWriteEnable <= '0';
                      else
-                        resultWriteEnable <= EXEresultWriteEnable;
+                        resultWriteEnable <= decodeResultWriteEnable;
                      end if;
-                           
-                     executeMemWriteEnable         <= EXEMemWriteEnable;  
-   
-                     executeLoadType               <= EXELoadType;   
-                     executeMemReadEnable          <= EXEReadEnable; 
+                       
+                     executeMemWriteEnable <= '0';
+                     if (exeExceptionMem = '0') then
+                        if (decodeMemWriteEnable = '1') then
+                           executeMemWriteEnable <= '1';
+                        elsif (decodeMemWriteLL = '1') then
+                           executeMemWriteEnable <= llBit;
+                        end if;
+                     end if;
+                        
+                     executeLoadType               <= decodeLoadType;   
+                     executeMemReadEnable          <= decodeMemReadEnable and (not exeExceptionMem); 
    
                      execute_ERET                  <= EXEERET;
                      executeCOP0WriteEnable        <= EXECOP0WriteEnable;     
@@ -2564,7 +2537,7 @@ begin
                      execute_COP1_Target           <= decodeSource2;
                      
                      -- new mul/div
-                     if (EXEcalcMULT = '1') then
+                     if (decodecalcMULT = '1') then
                         hilocalc <= HILOCALC_MULT;
                         mulsign  <= '1';
                         mul1     <= std_logic_vector(resize(signed(value1(31 downto 0)), 64));
@@ -2573,7 +2546,7 @@ begin
                         stall3   <= '1';
                      end if;
                      
-                     if (EXEcalcMULTU = '1') then
+                     if (decodecalcMULTU = '1') then
                         hilocalc <= HILOCALC_MULTU;
                         mulsign  <= '0';
                         mul1     <= x"00000000" & std_logic_vector(value1(31 downto 0));
@@ -2582,7 +2555,7 @@ begin
                         stall3   <= '1';
                      end if;
                      
-                     if (EXEcalcDMULT = '1') then
+                     if (decodecalcDMULT = '1') then
                         hilocalc <= HILOCALC_DMULT;
                         mulsign  <= '1';
                         mul1     <= std_logic_vector(value1);
@@ -2591,7 +2564,7 @@ begin
                         stall3   <= '1';
                      end if;
                      
-                     if (EXEcalcDMULTU = '1') then
+                     if (decodecalcDMULTU = '1') then
                         hilocalc <= HILOCALC_DMULTU;
                         mulsign  <= '0';
                         mul1     <= std_logic_vector(value1);
@@ -2616,7 +2589,7 @@ begin
                         if (decodeFPUValue2(62 downto 52) > 0) then mul2(52) <= '1'; end if;
                      end if;
                      
-                     if (EXEcalcDIV = '1') then
+                     if (decodecalcDIV = '1') then
                         DIVis32     <= '1';
                         hiloWait    <= 36;
                         stall3      <= '1';
@@ -2626,7 +2599,7 @@ begin
                         DIVstart    <= '1';
                      end if;
                      
-                      if (EXEcalcDDIV = '1') then
+                      if (decodecalcDDIV = '1') then
                         DIVis32     <= '0';
                         hiloWait    <= 68;
                         stall3      <= '1';
@@ -2636,7 +2609,7 @@ begin
                         DIVstart    <= '1';
                      end if;
                      
-                     if (EXEcalcDIVU = '1') then
+                     if (decodecalcDIVU = '1') then
                         DIVis32     <= '1';
                         hiloWait    <= 36;
                         stall3      <= '1';
@@ -2646,7 +2619,7 @@ begin
                         DIVstart    <= '1';
                      end if;
                      
-                     if (EXEcalcDDIVU = '1') then
+                     if (decodecalcDDIVU = '1') then
                         DIVis32     <= '0';
                         hiloWait    <= 68;
                         stall3      <= '1';
@@ -2656,10 +2629,10 @@ begin
                         DIVstart    <= '1';
                      end if;
                      
-                     if (EXEhiUpdate = '1') then hi <= value1; end if;
-                     if (EXEloUpdate = '1') then lo <= value1; end if;
+                     if (decodehiUpdate = '1') then hi <= value1; end if;
+                     if (decodeloUpdate = '1') then lo <= value1; end if;
                      
-                     if (EXEReadEnable = '1' or EXECOP0ReadEnable = '1' or EXECOP2ReadEnable = '1') then
+                     if ((exeExceptionMem = '0' and decodeMemReadEnable = '1') or EXECOP0ReadEnable = '1' or EXECOP2ReadEnable = '1') then
                         stall3              <= '1';
                         executeStallFromMEM <= '1';
                      end if;
