@@ -63,8 +63,16 @@ architecture arch of cpu_cop0 is
    signal COP0_0_INDEX_tlbEntry           : unsigned(5 downto 0) := (others => '0');
    signal COP0_0_INDEX_probefailure       : std_logic := '0';
    signal COP0_1_RANDOM                   : unsigned(5 downto 0) := (others => '0');
-   signal COP0_2_ENTRYLO0                 : unsigned(29 downto 0) := (others => '0');
-   signal COP0_3_ENTRYLO1                 : unsigned(29 downto 0) := (others => '0');
+   signal COP0_2_ENTRYLO0_phyAdr          : unsigned(23 downto 0) := (others => '0');
+   signal COP0_2_ENTRYLO0_cache           : unsigned(2 downto 0) := (others => '0');
+   signal COP0_2_ENTRYLO0_dirty           : std_logic := '0';
+   signal COP0_2_ENTRYLO0_valid           : std_logic := '0';
+   signal COP0_2_ENTRYLO0_global          : std_logic := '0';
+   signal COP0_3_ENTRYLO1_phyAdr          : unsigned(23 downto 0) := (others => '0');
+   signal COP0_3_ENTRYLO1_cache           : unsigned(2 downto 0) := (others => '0');
+   signal COP0_3_ENTRYLO1_dirty           : std_logic := '0';
+   signal COP0_3_ENTRYLO1_valid           : std_logic := '0';
+   signal COP0_3_ENTRYLO1_global          : std_logic := '0';
    signal COP0_4_CONTEXT                  : unsigned(63 downto 0) := (others => '0');
    signal COP0_5_PAGEMASK                 : unsigned(11 downto 0) := (others => '0');
    signal COP0_6_WIRED                    : unsigned(5 downto 0)  := (others => '0');
@@ -150,8 +158,21 @@ begin
             readValue(31)         <= COP0_0_INDEX_probefailure;
             
          when 1 => readValue(5 downto 0)   <= COP0_1_RANDOM;
-         when 2 => readValue(29 downto 0)  <= COP0_2_ENTRYLO0;
-         when 3 => readValue(29 downto 0)  <= COP0_3_ENTRYLO1;
+         
+         when 2 =>
+            readValue(29 downto 6)  <= COP0_2_ENTRYLO0_phyAdr;
+            readValue(5 downto 3)   <= COP0_2_ENTRYLO0_cache; 
+            readValue(2)            <= COP0_2_ENTRYLO0_dirty; 
+            readValue(1)            <= COP0_2_ENTRYLO0_valid; 
+            readValue(0)            <= COP0_2_ENTRYLO0_global;
+         
+         when 3 =>
+            readValue(29 downto 6)  <= COP0_3_ENTRYLO1_phyAdr;
+            readValue(5 downto 3)   <= COP0_3_ENTRYLO1_cache; 
+            readValue(2)            <= COP0_3_ENTRYLO1_dirty; 
+            readValue(1)            <= COP0_3_ENTRYLO1_valid; 
+            readValue(0)            <= COP0_3_ENTRYLO1_global;
+         
          when 4 => readValue               <= COP0_4_CONTEXT;
          when 5 => readValue(24 downto 13) <= COP0_5_PAGEMASK;
          when 6 => readValue(5 downto 0)   <= COP0_6_WIRED;
@@ -274,8 +295,16 @@ begin
             COP0_0_INDEX_tlbEntry           <= (others => '0');
             COP0_0_INDEX_probefailure       <= '0';
             COP0_1_RANDOM                   <= (others => '0');
-            COP0_2_ENTRYLO0                 <= (others => '0');
-            COP0_3_ENTRYLO1                 <= (others => '0');
+            COP0_2_ENTRYLO0_phyAdr          <= (others => '0');
+            COP0_2_ENTRYLO0_cache           <= (others => '0');
+            COP0_2_ENTRYLO0_dirty           <= '0';       
+            COP0_2_ENTRYLO0_valid           <= '0';       
+            COP0_2_ENTRYLO0_global          <= '0';
+            COP0_3_ENTRYLO1_phyAdr          <= (others => '0');
+            COP0_3_ENTRYLO1_cache           <= (others => '0');
+            COP0_3_ENTRYLO1_dirty           <= '0';       
+            COP0_3_ENTRYLO1_valid           <= '0';       
+            COP0_3_ENTRYLO1_global          <= '0';
             COP0_4_CONTEXT                  <= (others => '0');
             COP0_5_PAGEMASK                 <= (others => '0');
             COP0_6_WIRED                    <= (others => '0');
@@ -400,8 +429,20 @@ begin
                         COP0_0_INDEX_tlbEntry     <= writeValue(5 downto 0);
                         COP0_0_INDEX_probefailure <= writeValue(31);
                         
-                        when 2 => COP0_2_ENTRYLO0 <= writeValue(29 downto 0);
-                        when 3 => COP0_3_ENTRYLO1 <= writeValue(29 downto 0);
+                        when 2 =>
+                           COP0_2_ENTRYLO0_phyAdr <= writeValue(29 downto 6);
+                           COP0_2_ENTRYLO0_cache  <= writeValue(5 downto 3); 
+                           COP0_2_ENTRYLO0_dirty  <= writeValue(2);          
+                           COP0_2_ENTRYLO0_valid  <= writeValue(1);          
+                           COP0_2_ENTRYLO0_global <= writeValue(0);          
+                        
+                        when 3 =>
+                           COP0_3_ENTRYLO1_phyAdr <= writeValue(29 downto 6);
+                           COP0_3_ENTRYLO1_cache  <= writeValue(5 downto 3); 
+                           COP0_3_ENTRYLO1_dirty  <= writeValue(2);          
+                           COP0_3_ENTRYLO1_valid  <= writeValue(1);          
+                           COP0_3_ENTRYLO1_global <= writeValue(0);     
+                        
                         when 4 => COP0_4_CONTEXT(63 downto 23) <= writeValue(63 downto 23);
                         when 5 => COP0_5_PAGEMASK <= writeValue(24 downto 13);
                         
@@ -569,8 +610,19 @@ begin
    cop0_export(0)(31)            <= COP0_0_INDEX_probefailure;
    
    cop0_export(1)(5 downto 0)    <= COP0_1_RANDOM;
-   cop0_export(2)(29 downto 0)   <= COP0_2_ENTRYLO0;
-   cop0_export(3)(29 downto 0)   <= COP0_3_ENTRYLO1;
+   
+   cop0_export(2)(29 downto 6)   <= COP0_2_ENTRYLO0_phyAdr;
+   cop0_export(2)(5 downto 3)    <= COP0_2_ENTRYLO0_cache; 
+   cop0_export(2)(2)             <= COP0_2_ENTRYLO0_dirty; 
+   cop0_export(2)(1)             <= COP0_2_ENTRYLO0_valid; 
+   cop0_export(2)(0)             <= COP0_2_ENTRYLO0_global;
+   
+   cop0_export(3)(29 downto 6)   <= COP0_3_ENTRYLO1_phyAdr;
+   cop0_export(3)(5 downto 3)    <= COP0_3_ENTRYLO1_cache; 
+   cop0_export(3)(2)             <= COP0_3_ENTRYLO1_dirty; 
+   cop0_export(3)(1)             <= COP0_3_ENTRYLO1_valid; 
+   cop0_export(3)(0)             <= COP0_3_ENTRYLO1_global;
+   
    cop0_export(4)                <= COP0_4_CONTEXT;
    cop0_export(5)(24 downto 13)  <= COP0_5_PAGEMASK;
    cop0_export(6)(5 downto 0)    <= COP0_6_WIRED;

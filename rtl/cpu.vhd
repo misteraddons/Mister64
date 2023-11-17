@@ -122,11 +122,7 @@ architecture arch of cpu is
    );
    signal memstate : t_memstate := MEMSTATE_IDLE;                 
    
-   signal stallNew1                    : std_logic := '0';
-   signal stallNew2                    : std_logic := '0';
-   signal stallNew3                    : std_logic := '0';
    signal stallNew4                    : std_logic := '0';
-   signal stallNew5                    : std_logic := '0';
                
    signal stall1                       : std_logic := '0';
    signal stall2                       : std_logic := '0';
@@ -224,7 +220,6 @@ architecture arch of cpu is
    signal decodeSource2                : unsigned(4 downto 0) := (others => '0');
    signal decodeValue1                 : unsigned(63 downto 0) := (others => '0');
    signal decodeValue2                 : unsigned(63 downto 0) := (others => '0');
-   signal decodeOP                     : unsigned(5 downto 0) := (others => '0');
    signal decodeShamt                  : unsigned(5 downto 0) := (others => '0');
    signal decodeRD                     : unsigned(4 downto 0) := (others => '0');
    signal decodeTarget                 : unsigned(4 downto 0) := (others => '0');
@@ -259,6 +254,17 @@ architecture arch of cpu is
    signal decodeMemWriteLL             : std_logic := '0';
    signal decodeMemReadEnable          : std_logic := '0';
    signal decodeMem64Bit               : std_logic := '0';
+   signal decodeCacheEnable            : std_logic := '0';
+   signal decodeSetLL                  : std_logic := '0';
+   signal decodeResetLL                : std_logic := '0';
+   signal decodeERET                   : std_logic := '0';
+   signal decodeCOP0ReadEnable         : std_logic := '0';
+   signal decodeCOP0WriteEnable        : std_logic := '0';
+   signal decodeCOP0Register           : unsigned(4 downto 0);
+   signal decodeCOP1ReadEnable         : std_logic := '0';
+   signal decodeCOP2ReadEnable         : std_logic := '0';
+   signal decodeCOP2WriteEnable        : std_logic := '0';
+   signal decodeCOP64                  : std_logic := '0';
    
    type t_decodeBitFuncType is
    (
@@ -435,16 +441,15 @@ architecture arch of cpu is
    signal executeMemReadLastData       : unsigned(63 downto 0) := (others => '0');
    signal executeCOP0WriteEnable       : std_logic := '0';
    signal executeCOP0ReadEnable        : std_logic := '0';
-   signal executeCOP0Read64            : std_logic := '0';
    signal executeCOP0Register          : unsigned(4 downto 0) := (others => '0');
    signal executeCOP0WriteValue        : unsigned(63 downto 0) := (others => '0');
    signal executeCOP2WriteEnable       : std_logic := '0';
    signal executeCOP2ReadEnable        : std_logic := '0';
-   signal executeCOP2Read64            : std_logic := '0';
+   signal executeCOP64                 : std_logic := '0';
    signal executeLoadType              : CPU_LOADTYPE;
    signal executeCacheEnable           : std_logic := '0';
    signal executeCacheCommand          : unsigned(4 downto 0) := (others => '0');
-   signal execute_COP1_Target          : unsigned(4 downto 0) := (others => '0');
+   signal executeCOP1Target            : unsigned(4 downto 0) := (others => '0');
    signal executeCOP1ReadEnable        : std_logic := '0';
    signal execute_unstallFPUForward    : std_logic := '0';
    signal execute_ERET                 : std_logic := '0';
@@ -459,19 +464,8 @@ architecture arch of cpu is
    signal EXEBranchTaken               : std_logic := '0';
    signal EXEMemWriteData              : unsigned(63 downto 0) := (others => '0');
    signal EXEMemWriteMask              : std_logic_vector(7 downto 0) := (others => '0');
-   signal EXECOP0WriteEnable           : std_logic := '0';
-   signal EXECOP0ReadEnable            : std_logic := '0';
-   signal EXECOP0Read64                : std_logic := '0';
-   signal EXECOP0Register              : unsigned(4 downto 0) := (others => '0');
    signal EXECOP0WriteValue            : unsigned(63 downto 0) := (others => '0');
-   signal EXECOP2WriteEnable           : std_logic := '0';
-   signal EXECOP2ReadEnable            : std_logic := '0';
-   signal EXECOP2Read64                : std_logic := '0';
-   signal EXEllBit                     : std_logic := '0';
-   signal EXEERET                      : std_logic := '0';
-   signal EXECacheEnable               : std_logic := '0';
    signal EXECacheAddr                 : unsigned(28 downto 0);
-   signal ExeCOP1ReadEnable            : std_logic := '0';
    signal exeExceptionMem              : std_logic;
    
    --MULT/DIV
@@ -1149,7 +1143,6 @@ begin
                   decodeJumpTarget <= decJumpTarget;
                   decodeSource1    <= decSource1;
                   decodeSource2    <= decSource2;
-                  decodeOP         <= decOP;
                   decodeShamt      <= '0' & decShamt;     
                   decodeRD         <= decRD;        
                   decodeTarget     <= decTarget;    
@@ -1214,6 +1207,17 @@ begin
                   decodeMemWriteLL        <= '0';
                   decodeMemReadEnable     <= '0';
                   decodeMem64Bit          <= '0';
+                  decodeCacheEnable       <= '0';
+                  decodeSetLL             <= '0';
+                  decodeResetLL           <= '0';
+                  decodeERET              <= '0';
+                  decodeCOP0ReadEnable    <= '0';
+                  decodeCOP0WriteEnable   <= '0';
+                  decodeCOP0Register      <= decRD;
+                  decodeCOP1ReadEnable    <= '0';
+                  decodeCOP2ReadEnable    <= '0';
+                  decodeCOP2WriteEnable   <= '0';
+                  decodeCOP64             <= '0';
                   
                   -- decoding opcode specific
                   case (to_integer(decOP)) is
@@ -1596,7 +1600,7 @@ begin
                                  
                               when 2 | 6 =>
                                  report "TLBWI and TLBWR command not implemented" severity warning; 
-                                 if (to_integer(decodeImmData(5 downto 0)) = 6) then --TLBWR
+                                 if (to_integer(decImmData(5 downto 0)) = 6) then --TLBWR
                                     error_instr     <= '1';
                                  end if;
       
@@ -1606,33 +1610,31 @@ begin
       
                               when 16#18# => -- ERET
                                  decodeBranchType <= BRANCH_ERET;
-                                 --EXEllBit       <= '0';
-                                 --EXEERET        <= '1';
+                                 decodeERET       <= '1';
                                  
                               when others => null;
                                  
                            end case;
                         else
-                           --case (to_integer(decSource1(3 downto 0))) is
-                           --
-                           --   when 0 => -- mfc0
-                           --      EXECOP0ReadEnable  <= '1';
-                           --      EXECOP0Read64      <= '0';
-                           --                        
-                           --   when 1 => -- dmfc0
-                           --      EXECOP0ReadEnable  <= '1';
-                           --      EXECOP0Read64      <= '1';
-                           --
-                           --   when 4 => -- mtc0
-                           --      exeCOP0WriteEnable <= '1';
-                           --      exeCOP0WriteValue  <= unsigned(resize(signed(value2(31 downto 0)), 64));
-                           --      
-                           --   when 5 => -- dmtc0
-                           --      exeCOP0WriteEnable <= '1';
-                           --   
-                           --   when others => null;
-                           --      
-                           --end case;
+                           case (to_integer(decSource1(3 downto 0))) is
+                           
+                              when 0 => -- mfc0
+                                 decodeCOP0ReadEnable  <= '1';
+                                                   
+                              when 1 => -- dmfc0
+                                 decodeCOP0ReadEnable  <= '1';
+                                 decodeCOP64           <= '1';
+                           
+                              when 4 => -- mtc0
+                                 decodeCOP0WriteEnable <= '1';
+                                 
+                              when 5 => -- dmtc0
+                                 decodeCOP0WriteEnable <= '1';
+                                 decodeCOP64           <= '1';
+                              
+                              when others => null;
+                                 
+                           end case;
                         end if;
 
                      when 16#11# => -- COP1
@@ -1666,10 +1668,25 @@ begin
                            decodeExcType           <= EXCTYPE_DECODE;
                            decodeExcCode           <= x"B";
                            decodeExcCOP            <= "10";
-                        elsif (decSource1 = 3 or decSource1 = 7) then
-                           decodeExcType           <= EXCTYPE_DECODE;
-                           decodeExcCode           <= x"A";
-                           decodeExcCOP            <= "10";
+                        else
+                           case (to_integer(decSource1)) is
+                  
+                              when 0 | 2 =>
+                                 decodeCOP2ReadEnable <= '1';
+                              
+                              when 1 =>
+                                 decodeCOP2ReadEnable <= '1';
+                                 decodeCOP64 <= '1';
+                                 
+                              when 4 | 5 | 6 =>
+                                 decodeCOP2WriteEnable <= '1';
+                           
+                              when others => 
+                                 decodeExcType           <= EXCTYPE_DECODE;
+                                 decodeExcCode           <= x"A";
+                                 decodeExcCOP            <= "10";
+                                 
+                           end case;
                         end if;
 
                      when 16#13# => -- COP3 -> does not exist
@@ -1793,11 +1810,12 @@ begin
                         decodeMemWriteType      <= MEMWRITETYPE_SWR;
                         
                      when 16#2F# => -- Cache
-                        null;
+                        decodeCacheEnable       <= '1';
 
                      when 16#30# => -- LL
                         decodeMemReadEnable     <= '1';
                         decodeLoadType          <= LOADTYPE_DWORD;
+                        decodeSetLL             <= '1';
                         decodeExcType           <= EXCTYPE_ADDRW;
                         decodeExcCode           <= x"4";
 
@@ -1809,6 +1827,7 @@ begin
                            decodeExcCOP            <= "01";
                         else
                            decodeMemReadEnable     <= '1';
+                           decodeCOP1ReadEnable    <= '1';
                         end if;
 
                      when 16#32# => -- LWC2 -> NOP
@@ -1821,6 +1840,7 @@ begin
                         decodeMemReadEnable     <= '1';
                         decodeMem64Bit          <= '1';
                         decodeLoadType          <= LOADTYPE_QWORD;
+                        decodeSetLL             <= '1';
                         decodeExcType           <= EXCTYPE_ADDRD;
                         decodeExcCode           <= x"4";
 
@@ -1833,6 +1853,7 @@ begin
                            decodeExcCOP            <= "01";
                         else
                            decodeMemReadEnable     <= '1';
+                           decodeCOP1ReadEnable    <= '1';
                         end if;
 
                      when 16#37# => -- LD
@@ -1847,6 +1868,7 @@ begin
                         decodeResultMux         <= RESULTMUX_BIT;
                         decodeBitFuncType       <= BITFUNC_SC;
                         decodeMemWriteLL        <= '1';
+                        decodeResetLL           <= '1';
                         decodeMemWriteType      <= MEMWRITETYPE_WORD;
                         decodeExcType           <= EXCTYPE_ADDRW;
                         decodeExcCode           <= x"5";
@@ -1876,6 +1898,7 @@ begin
                         decodeResultMux         <= RESULTMUX_BIT;
                         decodeBitFuncType       <= BITFUNC_SC;
                         decodeMemWriteLL        <= '1';
+                        decodeResetLL           <= '1';
                         decodeMem64Bit          <= '1';
                         decodeMemWriteType      <= MEMWRITETYPE_DWORD;
                         decodeExcType           <= EXCTYPE_ADDRD;
@@ -2068,7 +2091,7 @@ begin
    resultDataMuxed64(31 downto 0) <= resultDataMuxed(31 downto 0);
    resultDataMuxed64(63 downto 32) <= (others => resultDataMuxed(31)) when decodeResult32 else resultDataMuxed(63 downto 32);
 
-   -- exceptions    
+   ---------------------- exceptions ------------------
    exceptionCode_3  <= decodeExcCode;
    exception_COP    <= decodeExcCOP;
    
@@ -2101,161 +2124,19 @@ begin
                      '1' when (decodeExcType = EXCTYPE_TRAPIE1 and calcResult_equal               = '1') else
                      '0';
                      
+   ---------------------- COP ------------------                  
+   FPU_command_ena      <= decodeFPUCommandEnable  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+   FPU_TransferEna      <= decodeFPUTransferEnable when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
                      
+   EXECOP0WriteValue    <= 39x"0" & calcMemAddr(28 downto 4)                 when (decodeSetLL = '1') else -- todo: should be modified by TLB and region check
+                           unsigned(resize(signed(value2(31 downto 0)), 64)) when (decodeCOP64 = '0') else
+                           value2;
 
-   process (decodeImmData, decodeJumpTarget, decodeSource1, decodeSource2, decodeValue1, decodeValue2, decodeOP, decodeShamt, decodeRD, 
-            exception, stall3, stall, value1, value2, pcOld0, resultData, eretPC, decodeFPUValue2, decodeFPUCommandEnable, decodeFPUTransferEnable,
-            hi, lo, executeIgnoreNext, decodeNew, llBit, calcResult_add, calcResult_sub, calcMemAddr, COP1_enable, COP2_enable, cmpEqual, fpuRegMode,
-            calcResult_lesserSigned, calcResult_lesserUnsigned, calcResult_lesserIMMSigned, calcResult_lesserIMMUnsigned, calcResult_equal)
-      variable calcResult           : unsigned(63 downto 0);
-   begin
+   ---------------------- load/store ------------------
    
-      EXEERET                 <= '0';
-      stallNew3               <= stall3;         
-      
-      EXECacheEnable          <= '0';
-      EXECacheAddr            <= calcMemAddr(28 downto 0);  
-      
-      EXECOP0WriteEnable      <= '0';
-      EXECOP0ReadEnable       <= '0';
-      EXECOP0Read64           <= '0';
-      EXECOP0Register         <= decodeRD;
-      EXECOP0WriteValue       <= value2;
-      
-      ExeCOP1ReadEnable       <= '0';
-      
-      EXECOP2WriteEnable      <= '0';
-      EXECOP2ReadEnable       <= '0';
-      EXECOP2Read64           <= '0';
-      
-      EXEllBit                <= llBit;
-      
-      FPU_command_ena         <= '0';
-      FPU_TransferEna         <= '0';
-      
-      if (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') then
-             
-         FPU_command_ena      <= decodeFPUCommandEnable;
-         FPU_TransferEna      <= decodeFPUTransferEnable;
-             
-         case (to_integer(decodeOP)) is
-               
-            when 16#10# => -- COP0
-               --if (cop0_SR(1) = '1' and cop0_SR(28) = '0') then
-               --   exceptionNew3   <= '1';
-               --   exceptionCode_3 <= x"B";
-               --else
-                  if (decodeSource1(4) = '1') then
-                     case (to_integer(decodeImmData(5 downto 0))) is
-                        
-                        when 16#18# => -- ERET
-                           EXEllBit       <= '0';
-                           EXEERET        <= '1';
-                           
-                        when others => null;
-                           
-                     end case;
-                  else
-                     case (to_integer(decodeSource1(3 downto 0))) is
-                     
-                        when 0 => -- mfc0
-                           EXECOP0ReadEnable  <= '1';
-                           EXECOP0Read64      <= '0';
-                                             
-                        when 1 => -- dmfc0
-                           EXECOP0ReadEnable  <= '1';
-                           EXECOP0Read64      <= '1';
-
-                        when 4 => -- mtc0
-                           exeCOP0WriteEnable <= '1';
-                           exeCOP0WriteValue  <= unsigned(resize(signed(value2(31 downto 0)), 64));
-                           
-                        when 5 => -- dmtc0
-                           exeCOP0WriteEnable <= '1';
-                         
-                        when others => null;
-                           
-                     end case;
-                  end if;
-               --end if;
-               
-            when 16#12# => -- COP2
-               if (COP2_enable = '0') then
-
-               else  
-                  case (to_integer(decodeSource1)) is
-                  
-                     when 0 | 2 =>
-                        EXECOP2ReadEnable <= '1';
-                     
-                     when 1 =>
-                        EXECOP2ReadEnable <= '1';
-                        EXECOP2Read64 <= '1';
-                        
-                     when 4 | 5 | 6 =>
-                        EXECOP2WriteEnable <= '1';
-                  
-                     when others => null;
-                        
-                  end case;
-               end if;
-               
-            when 16#1A# => -- LDL
-               EXECacheAddr(2 downto 0) <= "000";
-               
-            when 16#1B# => -- LDR
-               EXECacheAddr(2 downto 0) <= "000";
-
-            when 16#22# => -- LWL
-               EXECacheAddr(1 downto 0) <= "00";
-               
-            when 16#26# => -- LWR
-               EXECacheAddr(1 downto 0) <= "00";          
-
-            when 16#2F# => -- Cache
-               EXECacheEnable <= '1';
-            
-            when 16#30# => -- LL
-               if (calcMemAddr(1 downto 0) /= "00") then
-
-               else
-                  EXEllBit           <= '1';
-                  exeCOP0WriteEnable <= '1';
-                  EXECOP0Register    <= to_unsigned(17,5);
-                  exeCOP0WriteValue(31 downto 0) <= 7x"0" & calcMemAddr(28 downto 4); -- todo: should be modified by TLB and region check
-               end if; 
-
-            when 16#31# => -- LWC1
-               if (COP1_enable = '0') then
-
-               else
-                  ExeCOP1ReadEnable <= '1';
-               end if;
-
-            when 16#34# => -- LLD 
-               if (calcMemAddr(2 downto 0) /= "000") then
-
-               else
-                  EXEllBit           <= '1';
-                  exeCOP0WriteEnable <= '1';
-                  EXECOP0Register    <= to_unsigned(17,5);
-                  exeCOP0WriteValue(31 downto 0) <= 7x"0" & calcMemAddr(28 downto 4); -- todo: should be modified by TLB and region check
-               end if;             
-
-            when 16#35# => -- LDC1 
-               if (COP1_enable = '0') then
-
-               else
-                  ExeCOP1ReadEnable <= '1';
-               end if;
- 
-            when others => null;
-         
-         end case;
-             
-      end if;
-      
-   end process;
+   EXECacheAddr  <= calcMemAddr(28 downto 3) & "000" when (decodeLoadType = LOADTYPE_LEFT64 or decodeLoadType = LOADTYPE_RIGHT64) else 
+                    calcMemAddr(28 downto 2) & "00"  when (decodeLoadType = LOADTYPE_LEFT or decodeLoadType = LOADTYPE_RIGHT) else 
+                    calcMemAddr(28 downto 0);  
    
    
    process (all)
@@ -2495,9 +2376,7 @@ begin
                      pcOld2                        <= pcOld1;  
                      opcode2                       <= opcode1;
 -- synthesis translate_on
-                           
-                     stall3                        <= stallNew3;
-                           
+                            
                      -- from calculation
                      if (decodeTarget = 0 or exceptionNew3 = '1') then
                         resultWriteEnable <= '0';
@@ -2517,24 +2396,33 @@ begin
                      executeLoadType               <= decodeLoadType;   
                      executeMemReadEnable          <= decodeMemReadEnable and (not exeExceptionMem); 
    
-                     execute_ERET                  <= EXEERET;
-                     executeCOP0WriteEnable        <= EXECOP0WriteEnable;     
-                     executeCOP0ReadEnable         <= EXECOP0ReadEnable;     
-                     executeCOP0Read64             <= EXECOP0Read64;     
-                     executeCOP0Register           <= EXECOP0Register;
+                     execute_ERET                  <= decodeERET;
+                     executeCOP0WriteEnable        <= decodeCOP0WriteEnable;     
+                     executeCOP0ReadEnable         <= decodeCOP0ReadEnable;      
+                     executeCOP0Register           <= decodeCOP0Register;
                      
-                     executeCOP2WriteEnable        <= EXECOP2WriteEnable;     
-                     executeCOP2ReadEnable         <= EXECOP2ReadEnable;     
-                     executeCOP2Read64             <= EXECOP2Read64;     
-
-                     llBit                         <= EXEllBit;  
+                     executeCOP1ReadEnable         <= decodeCOP1ReadEnable;
+                     executeCOP1Target             <= decodeSource2;
                      
-                     executeCOP1ReadEnable         <= ExeCOP1ReadEnable;
+                     executeCOP2WriteEnable        <= decodeCOP2WriteEnable;     
+                     executeCOP2ReadEnable         <= decodeCOP2ReadEnable; 
+                     
+                     executeCOP64                  <= decodeCOP64;
 
-                     executeCacheEnable            <= EXECacheEnable;
+                     if (decodeERET = '1') then
+                        llBit <= '0';
+                     elsif (exeExceptionMem = '0') then
+                        if (decodeResetLL = '1') then
+                           llBit <= '0';
+                        elsif (decodeSetLL = '1') then
+                           llBit <= '1';
+                           executeCOP0WriteEnable <= '1';
+                           executeCOP0Register    <= to_unsigned(17,5);
+                        end if;
+                     end if;
+
+                     executeCacheEnable            <= decodeCacheEnable;
                      executeCacheCommand           <= decodeSource2;
-                     
-                     execute_COP1_Target           <= decodeSource2;
                      
                      -- new mul/div
                      if (decodecalcMULT = '1') then
@@ -2632,7 +2520,7 @@ begin
                      if (decodehiUpdate = '1') then hi <= value1; end if;
                      if (decodeloUpdate = '1') then lo <= value1; end if;
                      
-                     if ((exeExceptionMem = '0' and decodeMemReadEnable = '1') or EXECOP0ReadEnable = '1' or EXECOP2ReadEnable = '1') then
+                     if ((exeExceptionMem = '0' and decodeMemReadEnable = '1') or decodeCOP0ReadEnable = '1' or decodeCOP2ReadEnable = '1') then
                         stall3              <= '1';
                         executeStallFromMEM <= '1';
                      end if;
@@ -2811,7 +2699,7 @@ begin
    read4_Addr         <= writebackReadAddress         when (stall4 = '1') else executeMemAddress(31 downto 0);
    read4_oldData      <= writebackReadLastData        when (stall4 = '1') else executeMemReadLastData;
    read4_cop1_readEna <= writeback_COP1_ReadEnable    when (stall4 = '1') else executeCOP1ReadEnable;
-   read4_cop1_target  <= cop1_stage4_target           when (stall4 = '1') else execute_COP1_Target;
+   read4_cop1_target  <= cop1_stage4_target           when (stall4 = '1') else executeCOP1Target;
    read4_useLoadType  <= writebackLoadType            when (stall4 = '1') else executeLoadType;       
    read4_useTarget    <= writebackTarget              when (stall4 = '1') else resultTarget;
    
@@ -2862,7 +2750,7 @@ begin
                   writeback_UseCache           <= datacache_readena or datacache_writeena or executeCacheEnable;
                   
                   writeback_COP1_ReadEnable    <= executeCOP1ReadEnable;
-                  cop1_stage4_target           <= execute_COP1_Target;
+                  cop1_stage4_target           <= executeCOP1Target;
                   
                   writeback_fifoStall          <= '0';
                   
@@ -2901,7 +2789,7 @@ begin
                         writebackWriteEnable <= '1';
                      end if;
                      
-                     if (executeCOP0Read64 = '1') then
+                     if (executeCOP64 = '1') then
                         writebackData <= COP0ReadValue;
                      else
                         writebackData <= unsigned(resize(signed(COP0ReadValue(31 downto 0)), 64));
@@ -2913,7 +2801,7 @@ begin
                         writebackWriteEnable <= '1';
                      end if;
                      
-                     if (executeCOP2Read64 = '1') then
+                     if (executeCOP64 = '1') then
                         writebackData <= COP2Latch;
                      else
                         writebackData <= unsigned(resize(signed(COP2Latch(31 downto 0)), 64));

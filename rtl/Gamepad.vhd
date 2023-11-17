@@ -2,6 +2,8 @@ library IEEE;
 use IEEE.std_logic_1164.all;  
 use IEEE.numeric_std.all; 
 
+use work.pFunctions.all;
+
 entity Gamepad is
    port 
    (
@@ -220,7 +222,7 @@ begin
    port map
    (
       clk       => clk1x,
-      address   => std_logic_vector(pakinit_addr(6 downto 0)),
+      address   => std_logic_vector(pakinit_addr(7 downto 0)),
       data      => pakinit_data
    );
    
@@ -304,8 +306,8 @@ begin
                sdram_rnw       <= '0';
                sdram_writeMask <= "1111";
                sdram_address   <= resize(unsigned(pakinit_addr & "00"), 27) + to_unsigned(16#500000#, 27);
-               if (pakinit_addr(12 downto 0) < 128) then
-                  sdram_dataWrite <= pakinit_data;
+               if (pakinit_addr(12 downto 0) < 256) then
+                  sdram_dataWrite <= byteswap32(pakinit_data);
                else
                   sdram_dataWrite <= (others => '0');
                end if;
