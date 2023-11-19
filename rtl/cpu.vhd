@@ -265,6 +265,10 @@ architecture arch of cpu is
    signal decodeCOP2ReadEnable         : std_logic := '0';
    signal decodeCOP2WriteEnable        : std_logic := '0';
    signal decodeCOP64                  : std_logic := '0';
+   signal decodeTLBR                   : std_logic := '0';
+   signal decodeTLBWI                  : std_logic := '0';
+   signal decodeTLBWR                  : std_logic := '0';
+   signal decodeTLBP                   : std_logic := '0';
    
    type t_decodeBitFuncType is
    (
@@ -466,7 +470,13 @@ architecture arch of cpu is
    signal EXEMemWriteMask              : std_logic_vector(7 downto 0) := (others => '0');
    signal EXECOP0WriteValue            : unsigned(63 downto 0) := (others => '0');
    signal EXECacheAddr                 : unsigned(28 downto 0);
-   signal exeExceptionMem              : std_logic;
+   signal EXEExceptionMem              : std_logic;
+   signal EXETLBR                      : std_logic;
+   signal EXETLBWI                     : std_logic;
+   signal EXETLBWR                     : std_logic;
+   signal EXETLBP                      : std_logic;
+   signal EXETLBMapped                 : std_logic;
+   signal EXETLBDataAccess             : std_logic;
    
    --MULT/DIV
    type CPU_HILOCALC is
@@ -503,7 +513,13 @@ architecture arch of cpu is
    signal COP2_enable                  : std_logic;
    signal fpuRegMode                   : std_logic;
    signal privilegeMode                : unsigned(1 downto 0);
+   signal bit64region                  : std_logic;
    signal irqTrigger                   : std_logic;
+   signal TLBDone                      : std_logic;
+   
+   signal TLB_dataStall                : std_logic;
+   signal TLB_dataUnStall              : std_logic;
+   signal TLB_dataAddrOut              : unsigned(31 downto 0);
 
    -- COP1
    signal cop1_stage4_writeEnable      : std_logic := '0';
@@ -991,6 +1007,7 @@ begin
    exceptionNew1   <= '0';
    
    -- todo: only in kernelmode and only in 32bit mode
+   -- todo: check both addresses and TLB type!
    fetchCache     <= '1' when (FetchAddr1(31 downto 29) = "100") else '0';
    
    FetchAddr <= FetchAddr2 when (FetchAddrSelect = '1') else FetchAddr1;
@@ -1218,6 +1235,10 @@ begin
                   decodeCOP2ReadEnable    <= '0';
                   decodeCOP2WriteEnable   <= '0';
                   decodeCOP64             <= '0';
+                  decodeTLBR              <= '0';
+                  decodeTLBWI             <= '0';
+                  decodeTLBWR             <= '0';
+                  decodeTLBP              <= '0';
                   
                   -- decoding opcode specific
                   case (to_integer(decOP)) is
@@ -1594,20 +1615,10 @@ begin
                         blockIRQ <= '1';
                         if (decSource1(4) = '1') then
                            case (to_integer(decImmData(5 downto 0))) is
-                              when 1 =>
-                                 report "TLBR command not implemented" severity warning;
-                                 error_instr     <= '1';                           
-                                 
-                              when 2 | 6 =>
-                                 report "TLBWI and TLBWR command not implemented" severity warning; 
-                                 if (to_integer(decImmData(5 downto 0)) = 6) then --TLBWR
-                                    error_instr     <= '1';
-                                 end if;
-      
-                              when 8 =>
-                                 report "TLBP command not implemented" severity warning;     
-                                 error_instr     <= '1';
-      
+                              when 1 => decodeTLBR  <= '1';                         
+                              when 2 => decodeTLBWI <= '1'; 
+                              when 6 => decodeTLBWR <= '1';
+                              when 8 => decodeTLBP  <= '1';
                               when 16#18# => -- ERET
                                  decodeBranchType <= BRANCH_ERET;
                                  decodeERET       <= '1';
@@ -2095,13 +2106,13 @@ begin
    exceptionCode_3  <= decodeExcCode;
    exception_COP    <= decodeExcCOP;
    
-   exeExceptionMem <= '1' when (decodeExcType = EXCTYPE_ADDRH   and calcMemAddr(0) = '1') else
+   EXEExceptionMem <= '1' when (decodeExcType = EXCTYPE_ADDRH   and calcMemAddr(0) = '1') else
                       '1' when (decodeExcType = EXCTYPE_ADDRW   and calcMemAddr(1 downto 0) > 0) else
                       '1' when (decodeExcType = EXCTYPE_ADDRD   and calcMemAddr(2 downto 0) > 0) else
                       '0';
    
    exceptionNew3  <= '0' when (exception = '1' or stall > 0 or executeIgnoreNext = '1' or decodeNew = '0') else
-                     '1' when (exeExceptionMem = '1') else
+                     '1' when (EXEExceptionMem = '1') else
                      '1' when (decodeExcType = EXCTYPE_DECODE) else
                      '1' when (decodeExcType = EXCTYPE_PC      and value1(1 downto 0) > 0) else
                      '1' when (decodeExcType = EXCTYPE_ADD     and (((calcResult_add(31) xor value1(31)) and (calcResult_add(31) xor value2(31))) = '1')) else
@@ -2131,6 +2142,19 @@ begin
    EXECOP0WriteValue    <= 39x"0" & calcMemAddr(28 downto 4)                 when (decodeSetLL = '1') else -- todo: should be modified by TLB and region check
                            unsigned(resize(signed(value2(31 downto 0)), 64)) when (decodeCOP64 = '0') else
                            value2;
+                           
+   EXETLBR  <= decodeTLBR  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+   EXETLBWI <= decodeTLBWI when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+   EXETLBWR <= decodeTLBWR when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+   EXETLBP  <= decodeTLBP  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+
+   -- 64bit mode?
+   EXETLBMapped <= '1' when (privilegeMode = "00" and (calcMemAddr(31 downto 29) < 4 or calcMemAddr(31 downto 29) = 6 or calcMemAddr(31 downto 29) = 7)) else
+                   '1' when (privilegeMode = "01" and (calcMemAddr(31 downto 29) < 4 or calcMemAddr(31 downto 29) = 6)) else
+                   '1' when (privilegeMode = "10" and (calcMemAddr(31 downto 29) < 4)) else
+                   '0';
+   
+   EXETLBDataAccess <= decodeMemReadEnable or decodeMemWriteEnable when (EXETLBMapped = '1' and exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
 
    ---------------------- load/store ------------------
    
@@ -2325,6 +2349,19 @@ begin
                stall3     <= '0';
                executeNew <= '1';
             end if;
+            
+            -- TLB unstall
+            if (TLBDone = '1') then
+               stall3     <= '0';
+               executeNew <= '1';
+            end if;
+            
+            if (TLB_dataUnStall = '1') then
+               executeMemAddress   <= 32x"0" & TLB_dataAddrOut;
+               executeStallFromMEM <= '1';
+               executeNew          <= '1';
+            end if;
+            
 
             if (stall = 0) then
             
@@ -2336,9 +2373,14 @@ begin
                   
                executeMem64Bit         <= decodeMem64Bit;
                executeMemWriteData     <= EXEMemWriteData;             
-               executeMemWriteMask     <= EXEMemWriteMask;             
-               executeMemAddress       <= calcMemAddr; 
-               executeMemReadLastData  <= value2;              
+               executeMemWriteMask     <= EXEMemWriteMask;
+               executeMemReadLastData  <= value2;           
+
+               if (EXETLBDataAccess = '1') then
+                  executeMemAddress <= 32x"0" & TLB_dataAddrOut;
+               else
+                  executeMemAddress <= calcMemAddr; 
+               end if;
                
                executeCOP0WriteValue   <= EXECOP0WriteValue; 
 
@@ -2385,7 +2427,7 @@ begin
                      end if;
                        
                      executeMemWriteEnable <= '0';
-                     if (exeExceptionMem = '0') then
+                     if (EXEExceptionMem = '0') then
                         if (decodeMemWriteEnable = '1') then
                            executeMemWriteEnable <= '1';
                         elsif (decodeMemWriteLL = '1') then
@@ -2394,7 +2436,7 @@ begin
                      end if;
                         
                      executeLoadType               <= decodeLoadType;   
-                     executeMemReadEnable          <= decodeMemReadEnable and (not exeExceptionMem); 
+                     executeMemReadEnable          <= decodeMemReadEnable and (not EXEExceptionMem); 
    
                      execute_ERET                  <= decodeERET;
                      executeCOP0WriteEnable        <= decodeCOP0WriteEnable;     
@@ -2411,7 +2453,7 @@ begin
 
                      if (decodeERET = '1') then
                         llBit <= '0';
-                     elsif (exeExceptionMem = '0') then
+                     elsif (EXEExceptionMem = '0') then
                         if (decodeResetLL = '1') then
                            llBit <= '0';
                         elsif (decodeSetLL = '1') then
@@ -2520,7 +2562,7 @@ begin
                      if (decodehiUpdate = '1') then hi <= value1; end if;
                      if (decodeloUpdate = '1') then lo <= value1; end if;
                      
-                     if ((exeExceptionMem = '0' and decodeMemReadEnable = '1') or decodeCOP0ReadEnable = '1' or decodeCOP2ReadEnable = '1') then
+                     if ((EXEExceptionMem = '0' and decodeMemReadEnable = '1') or decodeCOP0ReadEnable = '1' or decodeCOP2ReadEnable = '1') then
                         stall3              <= '1';
                         executeStallFromMEM <= '1';
                      end if;
@@ -2535,6 +2577,15 @@ begin
                            execute_unstallFPUForward <= '1';
                         end if;
                      end if;
+                     
+                     if (decodeTLBR = '1' or decodeTLBWI = '1' or decodeTLBWR = '1' or decodeTLBP = '1') then
+                        stall3 <= '1';
+                     end if;
+                        
+                     if (TLB_dataStall = '1') then
+                        stall3              <= '1';
+                        executeStallFromMEM <= '0';
+                     end if; 
                      
                   end if;
                   
@@ -3066,11 +3117,25 @@ begin
       COP2_enable       => COP2_enable,
       fpuRegMode        => fpuRegMode,
       privilegeMode     => privilegeMode,
+      bit64region       => bit64region,
 
       writeEnable       => executeCOP0WriteEnable,
       regIndex          => executeCOP0Register,
       writeValue        => executeCOP0WriteValue,
       readValue         => COP0ReadValue,
+      
+      TLBR              => EXETLBR,   
+      TLBWI             => EXETLBWI,  
+      TLBWR             => EXETLBWR,  
+      TLBP              => EXETLBP,   
+      TLBDone           => TLBDone,
+      
+      TLB_dataReq       => EXETLBDataAccess,   
+      TLB_dataIsWrite   => decodeMemWriteEnable,   
+      TLB_dataAddrIn    => calcMemAddr,
+      TLB_dataStall     => TLB_dataStall,
+      TLB_dataUnStall   => TLB_dataUnStall,
+      TLB_dataAddrOut   => TLB_dataAddrOut,
       
       SS_reset          => SS_reset,    
       SS_DataWrite      => SS_DataWrite,

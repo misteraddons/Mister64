@@ -44,11 +44,25 @@ entity cpu_cop0 is
       COP2_enable       : out std_logic;
       fpuRegMode        : out std_logic;
       privilegeMode     : out unsigned(1 downto 0) := (others => '0');
+      bit64region       : out std_logic;
                         
       writeEnable       : in  std_logic;
       regIndex          : in  unsigned(4 downto 0);
       writeValue        : in  unsigned(63 downto 0);
       readValue         : out unsigned(63 downto 0) := (others => '0');
+      
+      TLBR              : in  std_logic;
+      TLBWI             : in  std_logic;
+      TLBWR             : in  std_logic;
+      TLBP              : in  std_logic;
+      TLBDone           : out std_logic := '0';
+      
+      TLB_dataReq       : in  std_logic;
+      TLB_dataIsWrite   : in  std_logic;
+      TLB_dataAddrIn    : in  unsigned(63 downto 0);
+      TLB_dataStall     : out std_logic;
+      TLB_dataUnStall   : out std_logic;
+      TLB_dataAddrOut   : out unsigned(31 downto 0);
       
       SS_reset          : in  std_logic;
       SS_DataWrite      : in  std_logic_vector(63 downto 0);
@@ -135,6 +149,101 @@ architecture arch of cpu_cop0 is
    
    --signal irq_offCount                    : unsigned(13 downto 0);
    
+   
+   -- tlb
+   type tTLBState is
+   (
+      TLBIDLE,
+      TLBRESET,
+      TLBPROBE,
+      TLBDATA
+   );
+   signal TLBState : tTLBState := TLBRESET;
+   
+   signal TLB_resetAddr                   : unsigned(4 downto 0) := (others => '0');
+   signal TLB_readAddr                    : unsigned(4 downto 0) := (others => '0');
+   
+   signal TLBR_saved                      : std_logic := '0'; 
+   signal TLBWI_saved                     : std_logic := '0'; 
+   signal TLBWR_saved                     : std_logic := '0'; 
+   signal TLBP_saved                      : std_logic := '0'; 
+   signal TLB_Data_fetchReq_saved         : std_logic := '0'; 
+   
+   signal TLB_checkMask                   : unsigned(26 downto 0);
+   signal TLB_addMask                     : unsigned(23 downto 0);
+   signal TLB_virtAddrMasked              : unsigned(26 downto 0);
+   signal TLB_addrSelect                  : unsigned(12 downto 0);
+   signal TLB_bank                        : std_logic;
+   signal TLB_valid                       : std_logic;
+   signal TLB_dirty                       : std_logic;
+   signal TLB_cache                       : unsigned(2 downto 0);
+   signal TLB_phyAddr                     : unsigned(19 downto 0);
+   
+   signal TLBWRITE_global                 : std_logic;
+   signal TLBWRITE_valid0                 : std_logic;
+   signal TLBWRITE_valid1                 : std_logic;
+   signal TLBWRITE_dirty0                 : std_logic;
+   signal TLBWRITE_dirty1                 : std_logic;
+   signal TLBWRITE_cache0                 : unsigned(2 downto 0);
+   signal TLBWRITE_cache1                 : unsigned(2 downto 0);
+   signal TLBWRITE_phyAddr0               : unsigned(19 downto 0);
+   signal TLBWRITE_phyAddr1               : unsigned(19 downto 0);
+   signal TLBWRITE_pageMask               : unsigned(11 downto 0);
+   signal TLBWRITE_virtAddr               : unsigned(26 downto 0);
+   signal TLBWRITE_ASID                   : unsigned(7 downto 0);
+   signal TLBWRITE_region                 : unsigned(1 downto 0);
+   
+   signal TLBREAD_global                  : std_logic;
+   signal TLBREAD_valid0                  : std_logic;
+   signal TLBREAD_valid1                  : std_logic;
+   signal TLBREAD_dirty0                  : std_logic;
+   signal TLBREAD_dirty1                  : std_logic;
+   signal TLBREAD_cache0                  : unsigned(2 downto 0);
+   signal TLBREAD_cache1                  : unsigned(2 downto 0);
+   signal TLBREAD_phyAddr0                : unsigned(19 downto 0);
+   signal TLBREAD_phyAddr1                : unsigned(19 downto 0);
+   signal TLBREAD_pageMask                : unsigned(11 downto 0);
+   signal TLBREAD_virtAddr                : unsigned(26 downto 0);
+   signal TLBREAD_ASID                    : unsigned(7 downto 0);
+   signal TLBREAD_region                  : unsigned(1 downto 0);
+   
+   signal TLBMEM_writeEnable              : std_logic;
+   signal TLBMEM_writeData                : std_logic_vector(99 downto 0);
+   signal TLBMEM_writeAddr                : std_logic_vector(4 downto 0);
+   signal TLBMEM_readAddr                 : std_logic_vector(4 downto 0);
+   signal TLBMEM_readData                 : std_logic_vector(99 downto 0);
+   
+   signal TLB_Data_fetchReq               : std_logic;
+   signal TLB_Data_fetchIsWrite           : std_logic;
+   signal TLB_Data_fetchAddrIn            : unsigned(63 downto 0);
+   signal TLB_fetchAddrIn                 : unsigned(63 downto 0);
+   signal TLB_Data_fetchDone              : std_logic := '0';
+   signal TLB_fetchExcInvalid             : std_logic := '0';
+   signal TLB_fetchExcDirty               : std_logic := '0';
+   signal TLB_fetchExcNotFound            : std_logic := '0';
+   signal TLB_fetchCached                 : std_logic := '0';
+   signal TLB_fetchAddrOut                : unsigned(31 downto 0) := (others => '0');
+   
+-- synthesis translate_off
+   type tTLBENTRY is record
+      global                 : std_logic;
+      valid0                 : std_logic;
+      valid1                 : std_logic;
+      dirty0                 : std_logic;
+      dirty1                 : std_logic;
+      cache0                 : unsigned(2 downto 0);
+      cache1                 : unsigned(2 downto 0);
+      phyAddr0               : unsigned(19 downto 0);
+      phyAddr1               : unsigned(19 downto 0);
+      pageMask               : unsigned(11 downto 0);
+      virtAddr               : unsigned(26 downto 0);
+      ASID                   : unsigned(7 downto 0);
+      region                 : unsigned(1 downto 0);
+   end record; 
+   type tTLBENTRYS  is array(0 to 31) of tTLBENTRY;
+   signal TLBENTRYS : tTLBENTRYS;
+-- synthesis translate_on
+   
    -- savestates
    type t_ssarray is array(0 to 31) of unsigned(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
@@ -145,6 +254,7 @@ begin
    COP2_enable   <= COP0_12_SR_enable_cop2;
    fpuRegMode    <= COP0_12_SR_floatingPointMode;
    privilegeMode <= COP0_12_SR_privilegeMode;
+   bit64region   <= bit64mode;
    
    process (all)
    begin
@@ -256,7 +366,8 @@ begin
    begin
       if (rising_edge(clk93)) then
       
-         error_exception <= '0';
+         error_exception    <= '0';
+         TLB_Data_fetchDone <= '0';
       
          if (COP0_12_SR_errorLevel = '1') then
             eretPC <= COP0_30_EPCERROR;
@@ -363,6 +474,9 @@ begin
             cop0Written9                    <= 0;
             
             irqTrigger                      <= '0';
+            
+            TLBState                        <= TLBRESET;
+            TLB_resetAddr                   <= (others => '0');
 
          elsif (ce = '1') then
          
@@ -403,9 +517,11 @@ begin
             end if;
             
             -- when debugging systemtest...
-            --COP0_9_COUNT  <= (others => '0');
-            --COP0_1_RANDOM <= (others => '0');
-            --COP0_13_CAUSE_interruptPending(7) <= '0';
+-- synthesis translate_off
+            COP0_9_COUNT  <= (others => '0');
+            COP0_1_RANDOM <= (others => '0');
+            COP0_13_CAUSE_interruptPending(7) <= '0';
+-- synthesis translate_on
             
             -- CPU access
             if (exception = '1') then
@@ -575,10 +691,248 @@ begin
                   end if;
                end if;
             end if;
+            
+            -- tlb
+            TLBDone     <= '0';
+            TLBR_saved  <= TLBR_saved  or TLBR;
+            TLBWI_saved <= TLBWI_saved or TLBWI;
+            TLBWR_saved <= TLBWR_saved or TLBWR;
+            TLBP_saved  <= TLBP_saved  or TLBP;
+            TLB_Data_fetchReq_saved <= TLB_Data_fetchReq_saved or TLB_Data_fetchReq;
+            
+            case (TLBState) is
+            
+               when TLBIDLE =>
+                  TLB_readAddr    <= (others => '0');
+                  TLB_fetchAddrIn <= TLB_Data_fetchAddrIn;
+                  
+                  if (TLBR_saved = '1' or TLBR = '1') then
+                     TLBR_saved <= '0';
+                     TLBDone    <= '1';
+                     
+                     COP0_2_ENTRYLO0_global         <= TLBREAD_global;
+                     COP0_3_ENTRYLO1_global         <= TLBREAD_global;
+                     COP0_2_ENTRYLO0_valid          <= TLBREAD_valid0;
+                     COP0_3_ENTRYLO1_valid          <= TLBREAD_valid1;
+                     COP0_2_ENTRYLO0_dirty          <= TLBREAD_dirty0;
+                     COP0_3_ENTRYLO1_dirty          <= TLBREAD_dirty1;
+                     COP0_2_ENTRYLO0_cache          <= TLBREAD_cache0;
+                     COP0_3_ENTRYLO1_cache          <= TLBREAD_cache1;
+                     COP0_2_ENTRYLO0_phyAdr         <= x"0" & TLBREAD_phyAddr0;
+                     COP0_3_ENTRYLO1_phyAdr         <= x"0" & TLBREAD_phyAddr1;
+                     COP0_5_PAGEMASK                <= TLBREAD_pageMask;
+                     COP0_10_ENTRYHI_virtualAddress <= TLBREAD_virtAddr;
+                     COP0_10_ENTRYHI_addressSpaceID <= TLBREAD_ASID;
+                     COP0_10_ENTRYHI_region         <= TLBREAD_region;
+                  
+                  elsif (TLBWI_saved = '1' or TLBWI = '1' or TLBWR_saved = '1' or TLBWR = '1') then
+                     if (TLBWI_saved = '1' or TLBWI = '1') then
+
+                     end if;
+                     if (TLBWR_saved = '1' or TLBWR = '1') then
+
+                     end if;
+                     TLBWI_saved <= '0';
+                     TLBWR_saved <= '0';
+                     TLBDone    <= '1';
+
+                  elsif (TLBP_saved = '1' or TLBP = '1') then
+                     TLBP_saved <= '0';
+                     TLBState   <= TLBPROBE;
+                     
+                  elsif (TLB_Data_fetchReq_saved = '1' or TLB_Data_fetchReq = '1') then
+                     TLB_Data_fetchReq_saved <= '0';
+                     TLBState                <= TLBDATA;
+                     TLB_fetchExcNotFound    <= '1';
+                     
+                  end if;
+                  
+               when TLBRESET =>
+                  TLB_resetAddr <= TLB_resetAddr + 1;
+                  if (TLB_resetAddr = 31) then
+                     TLBState <= TLBIDLE;
+                  end if;
+                  
+               when TLBPROBE =>
+                  TLB_readAddr <= TLB_readAddr + 1;
+                  if (TLB_readAddr = 31) then
+                     TLBState                  <= TLBIDLE;
+                     COP0_0_INDEX_probefailure <= '1';
+                     COP0_0_INDEX_tlbEntry     <= (others => '0');
+                     TLBDone                   <= '1';
+                  end if;
+                  if ((COP0_10_ENTRYHI_virtualAddress and TLB_checkMask) = (TLBREAD_virtAddr and TLB_checkMask)) then
+                     if (COP0_10_ENTRYHI_region = TLBREAD_region) then
+                        if (TLBREAD_global = '1' or (COP0_10_ENTRYHI_addressSpaceID = TLBREAD_ASID)) then
+                           TLBState                  <= TLBIDLE;
+                           COP0_0_INDEX_probefailure <= '0';
+                           COP0_0_INDEX_tlbEntry     <= '0' & TLB_readAddr;
+                           TLBDone                   <= '1';
+                        end if;
+                     end if;
+                  end if;
+                  
+               when TLBDATA =>
+                  TLB_readAddr <= TLB_readAddr + 1;
+                  if (TLB_readAddr = 31) then
+                     TLBState           <= TLBIDLE;
+                     TLB_Data_fetchDone <= '1';
+                  end if;
+                  if (TLBREAD_global = '1' or (COP0_10_ENTRYHI_addressSpaceID = TLBREAD_ASID)) then
+                     if (TLB_virtAddrMasked = TLBREAD_virtAddr) then
+                        if (TLB_fetchAddrIn(63 downto 62) = TLBREAD_region) then
+                     
+                           -- todo: check for valid and dirty
+                           
+                           TLBState              <= TLBIDLE;
+                           TLB_Data_fetchDone    <= '1';
+                           TLB_fetchExcNotFound  <= '0';
+                           TLB_fetchAddrOut      <= (TLB_phyAddr & x"000") + (x"00" & (TLB_fetchAddrIn(23 downto 0) and TLB_addMask));
+                     
+                        end if;
+                     end if;
+                  end if;
+            
+            end case;
 
          end if; -- ce
       end if;
    end process;
+   
+   TLB_checkMask      <= 15x"7FFF" & (not TLBREAD_pageMask);
+   TLB_addMask        <= TLBREAD_pageMask & x"FFF";
+   
+   TLB_virtAddrMasked <= TLB_fetchAddrIn(39 downto 13) and TLB_checkMask;
+   
+   TLB_addrSelect     <= '0' & (TLBREAD_pageMask + 1);
+   TLB_bank           <= '1' when ((TLB_fetchAddrIn(24 downto 12) and TLB_addrSelect) > 0) else '0';
+   
+   TLB_valid   <= TLBREAD_valid1   when (TLB_bank = '1') else TLBREAD_valid0;
+   TLB_dirty   <= TLBREAD_dirty1   when (TLB_bank = '1') else TLBREAD_dirty0;
+   TLB_cache   <= TLBREAD_cache1   when (TLB_bank = '1') else TLBREAD_cache0;
+   TLB_phyAddr <= TLBREAD_phyAddr1 when (TLB_bank = '1') else TLBREAD_phyAddr0;
+   
+
+   
+   TLBWRITE_global   <= COP0_2_ENTRYLO0_global and COP0_3_ENTRYLO1_global;
+   TLBWRITE_valid0   <= COP0_2_ENTRYLO0_valid;
+   TLBWRITE_valid1   <= COP0_3_ENTRYLO1_valid;
+   TLBWRITE_dirty0   <= COP0_2_ENTRYLO0_dirty;
+   TLBWRITE_dirty1   <= COP0_3_ENTRYLO1_dirty;
+   TLBWRITE_cache0   <= COP0_2_ENTRYLO0_cache;
+   TLBWRITE_cache1   <= COP0_3_ENTRYLO1_cache;
+   TLBWRITE_phyAddr0 <= COP0_2_ENTRYLO0_phyAdr(19 downto 0);
+   TLBWRITE_phyAddr1 <= COP0_3_ENTRYLO1_phyAdr(19 downto 0);
+   TLBWRITE_pageMask <= COP0_5_PAGEMASK(11) & COP0_5_PAGEMASK(11) & COP0_5_PAGEMASK(9) & COP0_5_PAGEMASK(9) & COP0_5_PAGEMASK(7) & COP0_5_PAGEMASK(7) &
+                        COP0_5_PAGEMASK(5)  & COP0_5_PAGEMASK(5)  & COP0_5_PAGEMASK(3) & COP0_5_PAGEMASK(3) & COP0_5_PAGEMASK(1) & COP0_5_PAGEMASK(1);
+   TLBWRITE_virtAddr(26 downto 12) <= COP0_10_ENTRYHI_virtualAddress(26 downto 12);
+   TLBWRITE_virtAddr(11 downto  0) <= COP0_10_ENTRYHI_virtualAddress(11 downto 0) and (not TLBWRITE_pageMask);
+   TLBWRITE_ASID     <= COP0_10_ENTRYHI_addressSpaceID;
+   TLBWRITE_region   <= COP0_10_ENTRYHI_region;
+   
+   TLBMEM_writeData(0)            <= '0'             when (TLBState = TLBRESET) else TLBWRITE_global;  
+   TLBMEM_writeData(1)            <= '0'             when (TLBState = TLBRESET) else TLBWRITE_valid0;  
+   TLBMEM_writeData(2)            <= '0'             when (TLBState = TLBRESET) else TLBWRITE_valid1;  
+   TLBMEM_writeData(3)            <= '0'             when (TLBState = TLBRESET) else TLBWRITE_dirty0;  
+   TLBMEM_writeData(4)            <= '0'             when (TLBState = TLBRESET) else TLBWRITE_dirty1;  
+   TLBMEM_writeData( 7 downto  5) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_cache0);  
+   TLBMEM_writeData(10 downto  8) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_cache1);  
+   TLBMEM_writeData(30 downto 11) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_phyAddr0);
+   TLBMEM_writeData(50 downto 31) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_phyAddr1);
+   TLBMEM_writeData(62 downto 51) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_pageMask);
+   TLBMEM_writeData(89 downto 63) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_virtAddr);
+   TLBMEM_writeData(97 downto 90) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_ASID);    
+   TLBMEM_writeData(99 downto 98) <= (others => '0') when (TLBState = TLBRESET) else std_logic_vector(TLBWRITE_region);  
+
+   TLBMEM_writeEnable <= '1' when (TLBState = TLBRESET) else
+                         '1' when (TLBState = TLBIDLE and (TLBWI_saved = '1' or TLBWI = '1' or TLBWR_saved = '1' or TLBWR = '1')) else 
+                         '0';
+   
+   TLBMEM_writeAddr <= std_logic_vector(TLB_resetAddr) when (TLBState = TLBRESET) else
+                       std_logic_vector(COP0_0_INDEX_tlbEntry(4 downto 0)) when (TLBWI_saved = '1' or TLBWI = '1') else
+                       std_logic_vector(COP0_1_RANDOM(4 downto 0));
+   
+   iTLBMEM : entity mem.RamMLAB
+	GENERIC MAP 
+   (
+      width      => 100,
+      widthad    => 5
+	)
+	PORT MAP (
+      inclock    => clk93,
+      wren       => TLBMEM_writeEnable,
+      data       => TLBMEM_writeData,
+      wraddress  => TLBMEM_writeAddr,
+      rdaddress  => TLBMEM_readAddr,
+      q          => TLBMEM_readData
+	);
+   
+   TLBMEM_readAddr <= std_logic_vector(COP0_0_INDEX_tlbEntry(4 downto 0)) when (TLBState = TLBIDLE) else
+                      std_logic_vector(TLB_readAddr);
+   
+   TLBREAD_global   <= TLBMEM_readData(0);           
+   TLBREAD_valid0   <= TLBMEM_readData(1);           
+   TLBREAD_valid1   <= TLBMEM_readData(2);           
+   TLBREAD_dirty0   <= TLBMEM_readData(3);           
+   TLBREAD_dirty1   <= TLBMEM_readData(4);           
+   TLBREAD_cache0   <= unsigned(TLBMEM_readData( 7 downto  5));
+   TLBREAD_cache1   <= unsigned(TLBMEM_readData(10 downto  8));
+   TLBREAD_phyAddr0 <= unsigned(TLBMEM_readData(30 downto 11));
+   TLBREAD_phyAddr1 <= unsigned(TLBMEM_readData(50 downto 31));
+   TLBREAD_pageMask <= unsigned(TLBMEM_readData(62 downto 51));
+   TLBREAD_virtAddr <= unsigned(TLBMEM_readData(89 downto 63));
+   TLBREAD_ASID     <= unsigned(TLBMEM_readData(97 downto 90));
+   TLBREAD_region   <= unsigned(TLBMEM_readData(99 downto 98));
+   
+   icpu_TLB_data : entity work.cpu_TLB_data
+   port map
+   (
+      clk93                => clk93,          
+      reset                => reset,          
+                                       
+      TLBWI                => TLBWI,          
+      TLBWR                => TLBWR,          
+                                       
+      TLB_Req              => TLB_dataReq,  
+      TLB_IsWrite          => TLB_dataIsWrite,     
+      TLB_AddrIn           => TLB_dataAddrIn, 
+      TLB_Stall            => TLB_dataStall,  
+      TLB_UnStall          => TLB_dataUnStall,
+      TLB_AddrOut          => TLB_dataAddrOut,
+      
+      TLB_fetchReq         => TLB_Data_fetchReq,        
+      TLB_fetchIsWrite     => TLB_Data_fetchIsWrite,    
+      TLB_fetchAddrIn      => TLB_Data_fetchAddrIn,     
+      TLB_fetchDone        => TLB_Data_fetchDone,       
+      TLB_fetchExcInvalid  => TLB_fetchExcInvalid, 
+      TLB_fetchExcDirty    => TLB_fetchExcDirty,   
+      TLB_fetchExcNotFound => TLB_fetchExcNotFound,
+      TLB_fetchCached      => TLB_fetchCached,     
+      TLB_fetchAddrOut     => TLB_fetchAddrOut 
+   );
+   
+   -- synthesis translate_off
+   process (clk93)
+   begin
+      if (rising_edge(clk93)) then
+         if (TLBMEM_writeEnable = '1') then
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).global   <= TLBWRITE_global;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).valid0   <= TLBWRITE_valid0;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).valid1   <= TLBWRITE_valid1;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).dirty0   <= TLBWRITE_dirty0;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).dirty1   <= TLBWRITE_dirty1;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).cache0   <= TLBWRITE_cache0;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).cache1   <= TLBWRITE_cache1;  
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).phyAddr0 <= TLBWRITE_phyAddr0;
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).phyAddr1 <= TLBWRITE_phyAddr1;
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).pageMask <= TLBWRITE_pageMask;
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).virtAddr <= TLBWRITE_virtAddr;
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).ASID     <= TLBWRITE_ASID;    
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).region   <= TLBWRITE_region;  
+         end if;
+      end if;
+   end process;
+-- synthesis translate_on
    
 --##############################################################
 --############################### savestates

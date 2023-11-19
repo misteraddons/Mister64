@@ -7,10 +7,11 @@ vcom -93 -quiet -work sim/n64 ^
 ../system/src/mem/dpram.vhd
 
 vcom -2008 -quiet -work sim/n64 ^
+../../rtl/functions.vhd ^
 ../../rtl/SDRamMux.vhd ^
+../../rtl/pif_cpakinit.vhd ^
 ../../rtl/Gamepad.vhd ^
 ../../rtl/pifrom_ntsc_fast.vhd ^
-../../rtl/pif_cpakinit.vhd ^
 ../../rtl/PIF.vhd
 
 vcom -2008 -quiet -work sim/tb ^

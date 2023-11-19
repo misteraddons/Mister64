@@ -90,7 +90,7 @@ begin
       
       PIFCOMPARE           => '0',
       ISPAL                => '0',
-      EEPROMTYPE           => "00",
+      SAVETYPE             => "000",
       CICTYPE              => "0000",
                            
       command_start        => command_start,     
@@ -164,7 +164,6 @@ begin
       PADTYPE              => PADTYPE,
       PADDPADSWAP          => '0',
       CPAKFORMAT           => CPAKFORMAT,
-      PADSLOW              => '1',
       
       command_start        => command_start,     
       command_padindex     => command_padindex,  
@@ -201,6 +200,14 @@ begin
       pad_2_analog_v       => x"00",
       pad_3_analog_h       => x"00",
       pad_3_analog_v       => x"00",
+      
+      MOUSETYPE             => "000",
+      MouseEvent            => '0',
+      MouseLeft             => '0',
+      MouseRight            => '0',
+      MouseMiddle           => '0',
+      MouseX                => 9x"00",
+      MouseY                => 9x"00",
       
       sdram_request        => sdramMux_request(SDRAMMUX_PIF),   
       sdram_rnw            => sdramMux_rnw(SDRAMMUX_PIF),       
@@ -301,12 +308,10 @@ begin
       sdramMux_granted     => sdramMux_granted,   
       sdramMux_done        => sdramMux_done,      
       sdramMux_dataRead    => sdramMux_dataRead,
-      
-      rdp9fifo_reset       => '0',   
+       
       rdp9fifo_Din         => 54x"0",     
       rdp9fifo_Wr          => '0',      
       
-      rdp9fifoZ_reset      => '0',   
       rdp9fifoZ_Din        => 50x"0",     
       rdp9fifoZ_Wr         => '0'    
    );
@@ -319,7 +324,7 @@ begin
       DOREFRESH         => '0',
       INITFILE          => ".gb",
       SCRIPTLOADING     => '0',
-      FILELOADING       => '1',
+      FILELOADING       => '0',
       FILEOFFSET        => 16#800000#
    )
    port map

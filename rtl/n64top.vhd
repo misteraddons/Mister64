@@ -143,7 +143,6 @@ entity n64top is
       
       -- save
       SAVETYPE                : in  std_logic_vector(2 downto 0); -- 0 -> None, 1 -> EEPROM4, 2 -> EEPROM16, 3 -> SRAM32, 4 -> SRAM96, 5 -> Flash
-      EEPROMTYPE              : in  std_logic_vector(1 downto 0); -- 00 -> off, 01 -> 4kbit, 10 -> 16kbit
       CONTROLLERPAK           : in  std_logic;
       CPAKFORMAT              : in  std_logic;
       TRANSFERPAK             : in  std_logic;
@@ -985,7 +984,7 @@ begin
    process(clk1x)
    begin
       if rising_edge(clk1x) then
-         if (pif_idle = '1') then
+         if (pif_idle = '1' and pause = '0') then
             PADTYPE_latched0 <= PADTYPE0;
             PADTYPE_latched1 <= PADTYPE1;
             PADTYPE_latched2 <= PADTYPE2;
@@ -1035,7 +1034,7 @@ begin
       PIFCOMPARE           => PIFCOMPARE,
       ISPAL                => ISPAL,
       CICTYPE              => CICTYPE,
-      EEPROMTYPE           => EEPROMTYPE,
+      SAVETYPE             => SAVETYPE,
       
       error                => error_pif,
       isIdle               => pif_idle,

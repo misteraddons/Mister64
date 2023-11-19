@@ -17,7 +17,7 @@ entity pif is
       PIFCOMPARE           : in  std_logic;
       ISPAL                : in  std_logic;
       CICTYPE              : in  std_logic_vector(3 downto 0);
-      EEPROMTYPE           : in  std_logic_vector(1 downto 0); -- 00 -> off, 01 -> 4kbit, 10 -> 16kbit
+      SAVETYPE             : in  std_logic_vector(2 downto 0); -- 000 -> off, 001 -> 4kbit, 010 -> 16kbit
       
       error                : out std_logic := '0';
       isIdle               : out std_logic := '0';
@@ -666,7 +666,10 @@ begin
                   receive_done2 <= '0';
                   timeout1      <= '0';
                   timeout2      <= '0';
-                  if (toPad_ready = '1') then
+                  if (toPIF_timeout = '1') then
+                     state          <= EXTCOMM_RESPONSE_VALIDOVER;
+                     EXT_index      <= EXT_abortAddr;
+                  elsif (toPad_ready = '1') then
                      toPad_data    <= ram_q_b;
                      toPad_ena     <= '1';
                      sendcount     <= sendcount + 1;
@@ -723,12 +726,12 @@ begin
                -- responses for EEProm/RTC
                when EXTCOMM_EEPROMINFO =>
                   state <= EXTCOMM_RESPONSE_VALIDOVER;
-                  if (EEPROMTYPE = "01") then -- 4kbit
+                  if (SAVETYPE = "001") then -- 4kbit
                      EXT_valid           <= '1';
                      EXT_responsedata(0) <= x"00";
                      EXT_responsedata(1) <= x"80";
                      EXT_responsedata(2) <= x"00";
-                  elsif (EEPROMTYPE = "10") then -- 16kbit
+                  elsif (SAVETYPE = "010") then -- 16kbit
                      EXT_valid           <= '1';
                      EXT_responsedata(0) <= x"00";
                      EXT_responsedata(1) <= x"C0";

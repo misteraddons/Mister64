@@ -218,7 +218,6 @@ begin
       
       -- saves              
       SAVETYPE              => "011",
-      EEPROMTYPE            => "01",
       CONTROLLERPAK         => '1',
       CPAKFORMAT            => '0',
       TRANSFERPAK           => '0',
