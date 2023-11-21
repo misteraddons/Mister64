@@ -132,6 +132,7 @@ architecture arch of cpu is
    signal stall4Masked                 : unsigned(4 downto 0) := (others => '0');
                      
    signal exception                    : std_logic;
+   signal exceptionStage1              : std_logic;
    signal exceptionNew1                : std_logic := '0';
    signal exceptionNew3                : std_logic := '0';
    signal exceptionFPU                 : std_logic;
@@ -517,6 +518,11 @@ architecture arch of cpu is
    signal irqTrigger                   : std_logic;
    signal TLBDone                      : std_logic;
    
+   signal TLB_instrMapped              : std_logic;
+   signal TLB_instrReq                 : std_logic;
+   signal TLB_instrStall               : std_logic;
+   signal TLB_instrUnStall             : std_logic;
+   signal TLB_instrAddrOut             : unsigned(31 downto 0);   
    signal TLB_dataStall                : std_logic;
    signal TLB_dataUnStall              : std_logic;
    signal TLB_dataAddrOut              : unsigned(31 downto 0);
@@ -1011,6 +1017,13 @@ begin
    fetchCache     <= '1' when (FetchAddr1(31 downto 29) = "100") else '0';
    
    FetchAddr <= FetchAddr2 when (FetchAddrSelect = '1') else FetchAddr1;
+
+   TLB_instrMapped <= '1' when (privilegeMode = "00" and (FetchAddr(31 downto 29) < 4 or FetchAddr(31 downto 29) = 6 or FetchAddr(31 downto 29) = 7)) else
+                      '1' when (privilegeMode = "01" and (FetchAddr(31 downto 29) < 4 or FetchAddr(31 downto 29) = 6)) else
+                      '1' when (privilegeMode = "10" and (FetchAddr(31 downto 29) < 4)) else
+                      '0';
+                      
+   TLB_instrReq <= '1' when (TLB_instrMapped = '1' and stall = 0) else '0';
    
    process (clk93)
    begin
@@ -1056,6 +1069,16 @@ begin
                   stall1         <= '0';
                   opcode0        <= unsigned(byteswap32(mem_finished_dataRead(31 downto 0)));
                end if;
+               
+               if (TLB_instrUnStall = '1') then
+                  if (exceptionStage1 = '1') then
+                     stall1         <= '0';
+                     opcode0        <= (others => '0');
+                  else
+                     mem1_request    <= '1';
+                     mem1_address    <= TLB_instrAddrOut;
+                  end if;
+               end if;
             
             elsif (stall = 0 or fetchReady = '0') then
             
@@ -1065,7 +1088,9 @@ begin
                useCached_data     <= fetchCache;
                fetchReady         <= '1';
      
-               if (fetchCache = '1') then
+               if (TLB_instrMapped = '1') then
+                  stall1          <= '1'; 
+               elsif (fetchCache = '1') then
                   if (instrcache_hit = '0') then
                      instrcache_fill    <= '1';
                      stall1             <= '1';
@@ -2041,7 +2066,7 @@ begin
    
    -- use two nextaddress/branch paths with 2 tag rams, so different paths can be calculated in parallel to improve timing
    
-   FetchAddrSelect <= '0'  when (exception = '1' or executeIgnoreNext = '1' or decodeNew = '0') else
+   FetchAddrSelect <= '0'  when (exception = '1' or exceptionStage1 = '1' or executeIgnoreNext = '1' or decodeNew = '0') else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BGEZ and (cmpZero = '1' or cmpNegative = '0'))  else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BLTZ and cmpNegative = '1')                     else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BEQ  and cmpEqual = '1')                        else
@@ -2051,7 +2076,7 @@ begin
                       '1'  when (decodeBranchType = BRANCH_BC1         and decodeSource2(0) = FPU_CF) else
                       '0';
    
-   FetchAddr1 <= exceptionPC                                    when (exception = '1') else
+   FetchAddr1 <= exceptionPC                                    when (exception = '1' or exceptionStage1 = '1') else
                  PCnext                                         when (executeIgnoreNext = '1' or decodeNew = '0') else
                  value1                                         when (decodeBranchType = BRANCH_ALWAYS_REG) else
                  pcOld0(63 downto 28) & decodeJumpTarget & "00" when (decodeBranchType = BRANCH_JUMPIMM) else
@@ -2358,8 +2383,15 @@ begin
             
             if (TLB_dataUnStall = '1') then
                executeMemAddress   <= 32x"0" & TLB_dataAddrOut;
-               executeStallFromMEM <= '1';
                executeNew          <= '1';
+               if (exception = '0') then
+                  executeStallFromMEM <= '1';
+               else
+                  stall3                <= '0';
+                  executeMemReadEnable  <= '0';
+                  executeMemWriteEnable <= '0';
+                  executeCacheEnable    <= '0';
+               end if;
             end if;
             
 
@@ -3107,11 +3139,13 @@ begin
       exceptionCode_3   => exceptionCode_3,
       exception_COP     => exception_COP,
       isDelaySlot       => executeBranchdelaySlot,
+      nextDelaySlot     => EXEBranchdelaySlot,
       pcOld1            => PCold1,
       
       eretPC            => eretPC,
       exceptionPC       => exceptionPC,
       exception         => exception,   
+      exceptionStage1   => exceptionStage1,   
       
       COP1_enable       => COP1_enable,
       COP2_enable       => COP2_enable,
@@ -3129,6 +3163,12 @@ begin
       TLBWR             => EXETLBWR,  
       TLBP              => EXETLBP,   
       TLBDone           => TLBDone,
+      
+      TLB_instrReq      => TLB_instrReq,
+      TLB_instrAddrIn   => FetchAddr,
+      TLB_instrStall    => TLB_instrStall,
+      TLB_instrUnStall  => TLB_instrUnStall,
+      TLB_instrAddrOut  => TLB_instrAddrOut,
       
       TLB_dataReq       => EXETLBDataAccess,   
       TLB_dataIsWrite   => decodeMemWriteEnable,   

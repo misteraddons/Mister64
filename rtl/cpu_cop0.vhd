@@ -34,11 +34,13 @@ entity cpu_cop0 is
       exceptionCode_3   : in  unsigned(3 downto 0);
       exception_COP     : in  unsigned(1 downto 0);
       isDelaySlot       : in  std_logic;                   
+      nextDelaySlot     : in  std_logic;                   
       pcOld1            : in  unsigned(63 downto 0);
             
       eretPC            : out unsigned(63 downto 0) := (others => '0');
       exceptionPC       : out unsigned(63 downto 0) := (others => '0');
       exception         : out std_logic := '0';
+      exceptionStage1   : out std_logic := '0';
       
       COP1_enable       : out std_logic;
       COP2_enable       : out std_logic;
@@ -56,6 +58,12 @@ entity cpu_cop0 is
       TLBWR             : in  std_logic;
       TLBP              : in  std_logic;
       TLBDone           : out std_logic := '0';
+      
+      TLB_instrReq      : in  std_logic;
+      TLB_instrAddrIn   : in  unsigned(63 downto 0);
+      TLB_instrStall    : out std_logic;
+      TLB_instrUnStall  : out std_logic;
+      TLB_instrAddrOut  : out unsigned(31 downto 0);
       
       TLB_dataReq       : in  std_logic;
       TLB_dataIsWrite   : in  std_logic;
@@ -87,7 +95,8 @@ architecture arch of cpu_cop0 is
    signal COP0_3_ENTRYLO1_dirty           : std_logic := '0';
    signal COP0_3_ENTRYLO1_valid           : std_logic := '0';
    signal COP0_3_ENTRYLO1_global          : std_logic := '0';
-   signal COP0_4_CONTEXT                  : unsigned(63 downto 0) := (others => '0');
+   signal COP0_4_CONTEXT_PTE              : unsigned(40 downto 0) := (others => '0');
+   signal COP0_4_CONTEXT_BADVPN           : unsigned(18 downto 0) := (others => '0');
    signal COP0_5_PAGEMASK                 : unsigned(11 downto 0) := (others => '0');
    signal COP0_6_WIRED                    : unsigned(5 downto 0)  := (others => '0');
    signal COP0_8_BADVIRTUALADDRESS        : unsigned(63 downto 0) := (others => '0');
@@ -131,7 +140,9 @@ architecture arch of cpu_cop0 is
    signal COP0_17_LOADLINKEDADDRESS       : unsigned(63 downto 0) := (others => '0'); 
    signal COP0_18_WATCHLO                 : unsigned(31 downto 0) := (others => '0');   
    signal COP0_19_WATCHHI                 : unsigned(3 downto 0) := (others => '0');   
-   signal COP0_20_XCONTEXT                : unsigned(63 downto 4) := (others => '0');
+   signal COP0_20_XCONTEXT_PTE            : unsigned(30 downto 0) := (others => '0');
+   signal COP0_20_XCONTEXT_Region         : unsigned(1 downto 0) := (others => '0');
+   signal COP0_20_XCONTEXT_BadVPN         : unsigned(26 downto 0) := (others => '0');
    signal COP0_26_PARITYERROR             : unsigned(7 downto 0) := (others => '0');  
    signal COP0_28_TAGLO_primaryCacheState : unsigned(1 downto 0) := (others => '0');     
    signal COP0_28_TAGLO_physicalAddress   : unsigned(19 downto 0) := (others => '0');     
@@ -140,6 +151,7 @@ architecture arch of cpu_cop0 is
    signal COP0_LATCH                      : unsigned(63 downto 0) := (others => '0');   
    
    signal bit64mode                       : std_logic := '0';
+   signal tlbMiss                         : std_logic := '0';
    
    signal nextEPC_1                       : unsigned(63 downto 0) := (others => '0');
    signal isDelaySlot_1                   : std_logic := '0';
@@ -156,6 +168,7 @@ architecture arch of cpu_cop0 is
       TLBIDLE,
       TLBRESET,
       TLBPROBE,
+      TLBINSTR,
       TLBDATA
    );
    signal TLBState : tTLBState := TLBRESET;
@@ -167,6 +180,7 @@ architecture arch of cpu_cop0 is
    signal TLBWI_saved                     : std_logic := '0'; 
    signal TLBWR_saved                     : std_logic := '0'; 
    signal TLBP_saved                      : std_logic := '0'; 
+   signal TLB_Instr_fetchReq_saved        : std_logic := '0'; 
    signal TLB_Data_fetchReq_saved         : std_logic := '0'; 
    
    signal TLB_checkMask                   : unsigned(26 downto 0);
@@ -213,10 +227,19 @@ architecture arch of cpu_cop0 is
    signal TLBMEM_readAddr                 : std_logic_vector(4 downto 0);
    signal TLBMEM_readData                 : std_logic_vector(99 downto 0);
    
+   signal TLB_ExcInstrRead                : std_logic;
+   signal TLB_ExcInstrMiss                : std_logic;
+   signal TLB_ExcDataRead                 : std_logic;
+   signal TLB_ExcDataWrite                : std_logic;
+   signal TLB_ExcDataDirty                : std_logic;
+   signal TLB_ExcDataMiss                 : std_logic;
+   
+   signal TLB_Instr_fetchReq              : std_logic;
    signal TLB_Data_fetchReq               : std_logic;
-   signal TLB_Data_fetchIsWrite           : std_logic;
+   signal TLB_Instr_fetchAddrIn           : unsigned(63 downto 0);
    signal TLB_Data_fetchAddrIn            : unsigned(63 downto 0);
    signal TLB_fetchAddrIn                 : unsigned(63 downto 0);
+   signal TLB_Instr_fetchDone             : std_logic := '0';
    signal TLB_Data_fetchDone              : std_logic := '0';
    signal TLB_fetchExcInvalid             : std_logic := '0';
    signal TLB_fetchExcDirty               : std_logic := '0';
@@ -283,7 +306,12 @@ begin
             readValue(1)            <= COP0_3_ENTRYLO1_valid; 
             readValue(0)            <= COP0_3_ENTRYLO1_global;
          
-         when 4 => readValue               <= COP0_4_CONTEXT;
+         when 4 => 
+            readValue(63 downto 23) <= COP0_4_CONTEXT_PTE;
+            readValue(22 downto  4) <= COP0_4_CONTEXT_BADVPN;
+            readValue( 3 downto  0) <= (others => '0');
+            
+            
          when 5 => readValue(24 downto 13) <= COP0_5_PAGEMASK;
          when 6 => readValue(5 downto 0)   <= COP0_6_WIRED;
          when 8 => readValue               <= COP0_8_BADVIRTUALADDRESS;
@@ -342,7 +370,12 @@ begin
          when 17 => readValue <= COP0_17_LOADLINKEDADDRESS;    
          when 18 => readValue(31 downto 0) <= COP0_18_WATCHLO;    
          when 19 => readValue(3 downto 0) <= COP0_19_WATCHHI;    
-         when 20 => readValue(63 downto 4) <= COP0_20_XCONTEXT;    
+         
+         when 20 => 
+            readValue(63 downto 33) <= COP0_20_XCONTEXT_PTE;    
+            readValue(32 downto 31) <= COP0_20_XCONTEXT_Region;    
+            readValue(30 downto  4) <= COP0_20_XCONTEXT_BadVPN;    
+            
          when 26 => readValue(7 downto 0) <= COP0_26_PARITYERROR;       
 
          when 27 => readValue <= (others => '0');
@@ -363,11 +396,13 @@ begin
    process (clk93)
       variable mode        : unsigned(1 downto 0); 
       variable nextEPC     : unsigned(63 downto 0);
+      variable excAddr     : unsigned(63 downto 0);   
    begin
       if (rising_edge(clk93)) then
       
-         error_exception    <= '0';
-         TLB_Data_fetchDone <= '0';
+         error_exception     <= '0';
+         TLB_Instr_fetchDone <= '0';
+         TLB_Data_fetchDone  <= '0';
       
          if (COP0_12_SR_errorLevel = '1') then
             eretPC <= COP0_30_EPCERROR;
@@ -377,15 +412,27 @@ begin
          
          if (COP0_12_SR_vectorLocation = '1') then
          
-            -- todo tlb miss switch
-         
-            exceptionPC(31 downto 0) <= x"BFC00380";
-         
+            if (tlbMiss = '1' and COP0_12_SR_errorLevel = '0') then
+               if (bit64mode = '1') then
+                  exceptionPC(31 downto 0) <= x"BFC00280";
+               else
+                  exceptionPC(31 downto 0) <= x"BFC00200";
+               end if;
+            else
+               exceptionPC(31 downto 0) <= x"BFC00380";
+            end if;
+            
          else
             
-            -- todo tlb miss switch
-            
-            exceptionPC(31 downto 0) <= x"80000180";
+            if (tlbMiss = '1' and COP0_12_SR_errorLevel = '0') then
+               if (bit64mode = '1') then
+                  exceptionPC(31 downto 0) <= x"80000080";
+               else
+                  exceptionPC(31 downto 0) <= x"80000000";
+               end if;
+            else
+               exceptionPC(31 downto 0) <= x"80000180";
+            end if;
             
          end if;
          if (bit64mode = '1') then
@@ -416,7 +463,8 @@ begin
             COP0_3_ENTRYLO1_dirty           <= '0';       
             COP0_3_ENTRYLO1_valid           <= '0';       
             COP0_3_ENTRYLO1_global          <= '0';
-            COP0_4_CONTEXT                  <= (others => '0');
+            COP0_4_CONTEXT_PTE              <= (others => '0');
+            COP0_4_CONTEXT_BADVPN           <= (others => '0');
             COP0_5_PAGEMASK                 <= (others => '0');
             COP0_6_WIRED                    <= (others => '0');
             COP0_8_BADVIRTUALADDRESS        <= (others => '0');
@@ -460,7 +508,9 @@ begin
             COP0_17_LOADLINKEDADDRESS       <= (others => '0'); 
             COP0_18_WATCHLO                 <= (others => '0');   
             COP0_19_WATCHHI                 <= (others => '0');   
-            COP0_20_XCONTEXT                <= (others => '0');
+            COP0_20_XCONTEXT_PTE            <= (others => '0');
+            COP0_20_XCONTEXT_Region         <= (others => '0');
+            COP0_20_XCONTEXT_BadVPN         <= (others => '0');
             COP0_26_PARITYERROR             <= (others => '0');  
             COP0_28_TAGLO_primaryCacheState <= (others => '0');     
             COP0_28_TAGLO_physicalAddress   <= (others => '0');     
@@ -477,7 +527,14 @@ begin
             
             TLBState                        <= TLBRESET;
             TLB_resetAddr                   <= (others => '0');
-
+            TLBDone                         <= '0';
+            TLBR_saved                      <= '0';
+            TLBWI_saved                     <= '0';
+            TLBWR_saved                     <= '0';
+            TLBP_saved                      <= '0';
+            TLB_Instr_fetchReq_saved        <= '0';
+            TLB_Data_fetchReq_saved         <= '0';
+            
          elsif (ce = '1') then
          
             -- interrupt
@@ -524,7 +581,7 @@ begin
 -- synthesis translate_on
             
             -- CPU access
-            if (exception = '1') then
+            if (exception = '1' or exceptionStage1 = '1') then
          
                COP0_14_EPC               <= nextEPC_1;
                COP0_13_CAUSE_branchDelay <= isDelaySlot_1;
@@ -559,7 +616,7 @@ begin
                            COP0_3_ENTRYLO1_valid  <= writeValue(1);          
                            COP0_3_ENTRYLO1_global <= writeValue(0);     
                         
-                        when 4 => COP0_4_CONTEXT(63 downto 23) <= writeValue(63 downto 23);
+                        when 4 => COP0_4_CONTEXT_PTE <= writeValue(63 downto 23);
                         when 5 => COP0_5_PAGEMASK <= writeValue(24 downto 13);
                         
                         when 6 => 
@@ -618,7 +675,7 @@ begin
                         
                         when 18 => COP0_18_WATCHLO <= writeValue(31 downto 3) & '0' & writeValue(1 downto 0);
                         when 19 => COP0_19_WATCHHI <= writeValue(3 downto 0);
-                        when 20 => COP0_20_XCONTEXT(63 downto 33) <= writeValue(63 downto 33);
+                        when 20 => COP0_20_XCONTEXT_PTE <= writeValue(63 downto 33);
                         when 26 => COP0_26_PARITYERROR <= writeValue(7 downto 0);
                         
                         when 28 =>
@@ -660,19 +717,21 @@ begin
             -- new exception
             nextEPC := pcOld1;
             if (isDelaySlot = '1') then
-               nextEPC := pcOld1 - 4; -- should this be pcOld2 instead?
+               nextEPC := pcOld1 - 4; -- should this be pcOld2 instead? need to test with exception in branch delay slot after branch in branch delay slot 
             end if;
             if (stall = 0) then
-               exception     <= '0';
-               nextEPC_1     <= nextEPC;
-               isDelaySlot_1 <= isDelaySlot;
+               exception       <= '0';
+               exceptionStage1 <= '0';
+               nextEPC_1       <= nextEPC;
+               isDelaySlot_1   <= isDelaySlot;
             end if;
             
             if (exception = '0') then
-               if (stall = 0 or exceptionFPU = '1') then
-                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or exception1 = '1') then
+               if (stall = 0 or exceptionFPU = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or TLB_ExcInstrRead = '1') then
+                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or exception1 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or TLB_ExcInstrRead = '1') then
                   
                      exception <= '1';
+                     tlbMiss   <= '0';
                      
                      COP0_12_SR_exceptionLevel   <= '1';
                      
@@ -681,6 +740,19 @@ begin
                         COP0_13_CAUSE_exceptionCode    <= (others => '0');
                      elsif (exceptionFPU = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"F";
+                     elsif (TLB_ExcInstrRead = '1') then
+                        COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
+                        tlbMiss         <= TLB_ExcInstrMiss;
+                        exception       <= '0';
+                        exceptionStage1 <= '1';
+                     elsif (TLB_ExcInstrRead = '1' or TLB_ExcDataRead = '1') then
+                        COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
+                        tlbMiss <= TLB_ExcDataMiss;
+                     elsif (TLB_ExcDataWrite = '1') then
+                        COP0_13_CAUSE_exceptionCode    <= '0' & x"3";
+                        tlbMiss <= TLB_ExcDataMiss;
+                     elsif (TLB_ExcDataDirty = '1') then
+                        COP0_13_CAUSE_exceptionCode    <= '0' & x"1";
                      elsif (exception3 = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & exceptionCode_3;
                         COP0_13_CAUSE_coprocessorError <= exception_COP;
@@ -692,19 +764,43 @@ begin
                end if;
             end if;
             
+            -- addr exception
+            -- todo: also add other addr exceptions?
+            if (TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or TLB_ExcInstrRead = '1') then
+               excAddr := TLB_Data_fetchAddrIn;
+               
+               if (TLB_ExcInstrRead = '1') then
+                  excAddr   := TLB_Instr_fetchAddrIn;
+                  nextEPC_1 <= TLB_Instr_fetchAddrIn;
+                  if (nextDelaySlot = '1') then
+                     nextEPC_1 <= TLB_Instr_fetchAddrIn - 4;
+                  end if;
+               end if;
+               
+               COP0_8_BADVIRTUALADDRESS       <= excAddr;
+               
+               COP0_10_ENTRYHI_virtualAddress <= excAddr(39 downto 13);
+               COP0_10_ENTRYHI_region         <= excAddr(63 downto 62);
+               
+               COP0_4_CONTEXT_BADVPN          <= excAddr(31 downto 13);
+               
+               COP0_20_XCONTEXT_Region        <= excAddr(63 downto 62);
+               COP0_20_XCONTEXT_BadVPN        <= excAddr(39 downto 13);
+            end if;
+            
             -- tlb
-            TLBDone     <= '0';
-            TLBR_saved  <= TLBR_saved  or TLBR;
-            TLBWI_saved <= TLBWI_saved or TLBWI;
-            TLBWR_saved <= TLBWR_saved or TLBWR;
-            TLBP_saved  <= TLBP_saved  or TLBP;
-            TLB_Data_fetchReq_saved <= TLB_Data_fetchReq_saved or TLB_Data_fetchReq;
+            TLBDone                  <= '0';
+            TLBR_saved               <= TLBR_saved  or TLBR;
+            TLBWI_saved              <= TLBWI_saved or TLBWI;
+            TLBWR_saved              <= TLBWR_saved or TLBWR;
+            TLBP_saved               <= TLBP_saved  or TLBP;
+            TLB_Instr_fetchReq_saved <= TLB_Instr_fetchReq_saved or TLB_Instr_fetchReq;
+            TLB_Data_fetchReq_saved  <= TLB_Data_fetchReq_saved  or TLB_Data_fetchReq;
             
             case (TLBState) is
             
                when TLBIDLE =>
-                  TLB_readAddr    <= (others => '0');
-                  TLB_fetchAddrIn <= TLB_Data_fetchAddrIn;
+                  TLB_readAddr     <= (others => '0');
                   
                   if (TLBR_saved = '1' or TLBR = '1') then
                      TLBR_saved <= '0';
@@ -740,10 +836,20 @@ begin
                      TLBP_saved <= '0';
                      TLBState   <= TLBPROBE;
                      
+                  elsif (TLB_Instr_fetchReq_saved = '1' or TLB_Instr_fetchReq = '1') then
+                     TLB_Instr_fetchReq_saved <= '0';
+                     TLBState                 <= TLBINSTR;
+                     TLB_fetchAddrIn          <= TLB_Instr_fetchAddrIn;
+                     TLB_fetchExcNotFound     <= '1';
+                     TLB_fetchExcInvalid      <= '0';                
+                     
                   elsif (TLB_Data_fetchReq_saved = '1' or TLB_Data_fetchReq = '1') then
                      TLB_Data_fetchReq_saved <= '0';
                      TLBState                <= TLBDATA;
+                     TLB_fetchAddrIn         <= TLB_Data_fetchAddrIn;
                      TLB_fetchExcNotFound    <= '1';
+                     TLB_fetchExcInvalid     <= '0';
+                     TLB_fetchExcDirty       <= '0';
                      
                   end if;
                   
@@ -772,22 +878,37 @@ begin
                      end if;
                   end if;
                   
-               when TLBDATA =>
+               when TLBDATA | TLBINSTR =>
                   TLB_readAddr <= TLB_readAddr + 1;
                   if (TLB_readAddr = 31) then
                      TLBState           <= TLBIDLE;
-                     TLB_Data_fetchDone <= '1';
+                     if (TLBState = TLBINSTR) then
+                        TLB_Instr_fetchDone <= '1';
+                     else
+                        TLB_Data_fetchDone <= '1';
+                     end if;
                   end if;
                   if (TLBREAD_global = '1' or (COP0_10_ENTRYHI_addressSpaceID = TLBREAD_ASID)) then
                      if (TLB_virtAddrMasked = TLBREAD_virtAddr) then
                         if (TLB_fetchAddrIn(63 downto 62) = TLBREAD_region) then
                      
-                           -- todo: check for valid and dirty
+                           if (TLB_valid = '0') then
+                              TLB_fetchExcInvalid <= '1';
+                           end if;
                            
+                           if (TLB_dirty = '0') then
+                              TLB_fetchExcDirty <= '1';
+                           end if;
+
                            TLBState              <= TLBIDLE;
-                           TLB_Data_fetchDone    <= '1';
                            TLB_fetchExcNotFound  <= '0';
                            TLB_fetchAddrOut      <= (TLB_phyAddr & x"000") + (x"00" & (TLB_fetchAddrIn(23 downto 0) and TLB_addMask));
+                     
+                           if (TLBState = TLBINSTR) then
+                              TLB_Instr_fetchDone <= '1';
+                           else
+                              TLB_Data_fetchDone <= '1';
+                           end if;
                      
                         end if;
                      end if;
@@ -804,7 +925,7 @@ begin
    
    TLB_virtAddrMasked <= TLB_fetchAddrIn(39 downto 13) and TLB_checkMask;
    
-   TLB_addrSelect     <= '0' & (TLBREAD_pageMask + 1);
+   TLB_addrSelect     <= ('0' & TLBREAD_pageMask) + 1;
    TLB_bank           <= '1' when ((TLB_fetchAddrIn(24 downto 12) and TLB_addrSelect) > 0) else '0';
    
    TLB_valid   <= TLBREAD_valid1   when (TLB_bank = '1') else TLBREAD_valid0;
@@ -884,6 +1005,33 @@ begin
    TLBREAD_ASID     <= unsigned(TLBMEM_readData(97 downto 90));
    TLBREAD_region   <= unsigned(TLBMEM_readData(99 downto 98));
    
+   icpu_TLB_instr : entity work.cpu_TLB_instr
+   port map
+   (
+      clk93                => clk93,          
+      reset                => reset,          
+                                       
+      TLBWI                => TLBWI,          
+      TLBWR                => TLBWR,          
+                                       
+      TLB_Req              => TLB_instrReq,   
+      TLB_AddrIn           => TLB_instrAddrIn, 
+      TLB_Stall            => TLB_instrStall,  
+      TLB_UnStall          => TLB_instrUnStall,
+      TLB_AddrOut          => TLB_instrAddrOut,
+      
+      TLB_ExcRead          => TLB_ExcInstrRead,
+      TLB_ExcMiss          => TLB_ExcInstrMiss, 
+      
+      TLB_fetchReq         => TLB_Instr_fetchReq,          
+      TLB_fetchAddrIn      => TLB_Instr_fetchAddrIn,     
+      TLB_fetchDone        => TLB_Instr_fetchDone,       
+      TLB_fetchExcInvalid  => TLB_fetchExcInvalid,  
+      TLB_fetchExcNotFound => TLB_fetchExcNotFound,
+      TLB_fetchCached      => TLB_fetchCached,     
+      TLB_fetchAddrOut     => TLB_fetchAddrOut 
+   );
+   
    icpu_TLB_data : entity work.cpu_TLB_data
    port map
    (
@@ -900,8 +1048,12 @@ begin
       TLB_UnStall          => TLB_dataUnStall,
       TLB_AddrOut          => TLB_dataAddrOut,
       
-      TLB_fetchReq         => TLB_Data_fetchReq,        
-      TLB_fetchIsWrite     => TLB_Data_fetchIsWrite,    
+      TLB_ExcRead          => TLB_ExcDataRead, 
+      TLB_ExcWrite         => TLB_ExcDataWrite,
+      TLB_ExcDirty         => TLB_ExcDataDirty,
+      TLB_ExcMiss          => TLB_ExcDataMiss, 
+      
+      TLB_fetchReq         => TLB_Data_fetchReq,          
       TLB_fetchAddrIn      => TLB_Data_fetchAddrIn,     
       TLB_fetchDone        => TLB_Data_fetchDone,       
       TLB_fetchExcInvalid  => TLB_fetchExcInvalid, 
@@ -977,7 +1129,10 @@ begin
    cop0_export(3)(1)             <= COP0_3_ENTRYLO1_valid; 
    cop0_export(3)(0)             <= COP0_3_ENTRYLO1_global;
    
-   cop0_export(4)                <= COP0_4_CONTEXT;
+   cop0_export(4)(63 downto 23)  <= COP0_4_CONTEXT_PTE;
+   cop0_export(4)(22 downto  4)  <= COP0_4_CONTEXT_BADVPN;
+   cop0_export(4)( 3 downto  0)  <= (others => '0');
+   
    cop0_export(5)(24 downto 13)  <= COP0_5_PAGEMASK;
    cop0_export(6)(5 downto 0)    <= COP0_6_WIRED;
    cop0_export(8)                <= COP0_8_BADVIRTUALADDRESS;
@@ -1031,7 +1186,11 @@ begin
    cop0_export(17)               <= COP0_17_LOADLINKEDADDRESS;    
    cop0_export(18)(31 downto 0)  <= COP0_18_WATCHLO;    
    cop0_export(19)(3 downto 0)   <= COP0_19_WATCHHI;    
-   cop0_export(20)(63 downto 4)  <= COP0_20_XCONTEXT;    
+   
+   cop0_export(20)(63 downto 33) <= COP0_20_XCONTEXT_PTE;    
+   cop0_export(20)(32 downto 31) <= COP0_20_XCONTEXT_Region;    
+   cop0_export(20)(30 downto  4) <= COP0_20_XCONTEXT_BadVPN;   
+   
    cop0_export(26)(7 downto 0)   <= COP0_26_PARITYERROR;       
    
    cop0_export(28)(7 downto 6)   <= COP0_28_TAGLO_primaryCacheState;
