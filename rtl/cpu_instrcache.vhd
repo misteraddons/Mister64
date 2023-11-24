@@ -18,18 +18,20 @@ entity cpu_instrcache is
       ram_active        : in  std_logic := '0';
       ram_grant         : in  std_logic := '0';
       ram_done          : in  std_logic := '0';
-      ram_addr          : in  unsigned(28 downto 0);
       ddr3_DOUT         : in  std_logic_vector(63 downto 0);
       ddr3_DOUT_READY   : in  std_logic;
       
       read_select       : in  std_logic;
       read_addr1        : in  unsigned(28 downto 0);
       read_addr2        : in  unsigned(28 downto 0);
+      read_addrCompare1 : in  unsigned(28 downto 0);
+      read_addrCompare2 : in  unsigned(28 downto 0);
       read_hit          : out std_logic;
       read_data         : out std_logic_vector(31 downto 0) := (others => '0');
       
       fill_request      : in  std_logic;
-      fill_addr         : in  unsigned(28 downto 0);
+      fill_addrData     : in  unsigned(28 downto 0);
+      fill_addrTag      : in  unsigned(28 downto 0);
       fill_done         : out std_logic := '0';
       
       CacheCommandEna   : in  std_logic;
@@ -97,7 +99,7 @@ begin
    );
    
    tag_address_b1 <= std_logic_vector(read_addr1(13 downto 5));
-   read_hit1      <= '1' when (unsigned(tag_q_b1(16 downto 0)) = read_addr1(28 downto 12) and tag_q_b1(17) = '1') else '0';
+   read_hit1      <= '1' when (unsigned(tag_q_b1(16 downto 0)) = read_addrCompare1(28 downto 12) and tag_q_b1(17) = '1') else '0';
    
    itagram2 : entity mem.RamMLAB
    generic map
@@ -116,7 +118,7 @@ begin
    );
    
    tag_address_b2 <= std_logic_vector(read_addr2(13 downto 5));
-   read_hit2      <= '1' when (unsigned(tag_q_b2(16 downto 0)) = read_addr2(28 downto 12) and tag_q_b2(17) = '1') else '0';
+   read_hit2      <= '1' when (unsigned(tag_q_b2(16 downto 0)) = read_addrCompare2(28 downto 12) and tag_q_b2(17) = '1') else '0';
 
    --------- data
    
@@ -129,7 +131,7 @@ begin
          end if;
          
          if (ram_grant = '1') then
-            cache_addr_a <= ram_addr(13 downto 5) & "00";
+            cache_addr_a <= fill_addrTag(13 downto 5) & "00";
          elsif (ddr3_DOUT_READY = '1') then
             cache_addr_a <= cache_addr_a + 1;
             if (ram_grant_2x = '1' and cache_addr_a(1 downto 0) = "11") then
@@ -165,7 +167,7 @@ begin
       q_b         => cache_q_b
    );
    
-   cache_address_b <= std_logic_vector(fill_addr(13 downto 2))  when (state /= IDLE) else
+   cache_address_b <= std_logic_vector(fill_addrTag(13 downto 2))  when (state /= IDLE) else
                       std_logic_vector(read_addr2(13 downto 2)) when (read_select = '1') else
                       std_logic_vector(read_addr1(13 downto 2));
    
@@ -218,8 +220,8 @@ begin
                   if (ram_done = '1') then
                      state          <= IDLE;
                      tag_wren_a     <= '1';
-                     tag_data_a     <= '1' & std_logic_vector(fill_addr(28 downto 12));
-                     tag_address_a  <= std_logic_vector(fill_addr(13 downto 5));
+                     tag_data_a     <= '1' & std_logic_vector(fill_addrData(28 downto 12));
+                     tag_address_a  <= std_logic_vector(fill_addrTag(13 downto 5));
                      fill_done      <= '1'; 
                   end if;
                   

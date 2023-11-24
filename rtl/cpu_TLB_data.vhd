@@ -8,12 +8,12 @@ entity cpu_TLB_data is
       clk93                : in  std_logic;
       reset                : in  std_logic;
                            
-      TLBWI                : in  std_logic;
-      TLBWR                : in  std_logic;
+      TLBInvalidate        : in  std_logic;
                            
       TLB_Req              : in  std_logic;
       TLB_IsWrite          : in  std_logic;
       TLB_AddrIn           : in  unsigned(63 downto 0);
+      TLB_useCache         : out std_logic := '0';  
       TLB_Stall            : out std_logic := '0';
       TLB_UnStall          : out std_logic := '0';
       TLB_AddrOut          : out unsigned(31 downto 0) := (others => '0');
@@ -45,10 +45,14 @@ architecture arch of cpu_TLB_data is
    signal state : tstate := IDLE;
    
    signal TLB_fetchIsWrite  : std_logic := '0';
+   
+   signal mini_cached : std_logic := '0';
 
 begin 
 
    TLB_Stall <= '1' when (TLB_Req = '1') else '0';
+   
+   TLB_useCache <= mini_cached;
 
    process (clk93)
    begin
@@ -87,6 +91,7 @@ begin
                         state         <= EXCEPTION;
                      end if;
                      TLB_AddrOut  <= TLB_fetchAddrOut;
+                     mini_cached  <= TLB_fetchCached;
                      TLB_ExcRead  <= (TLB_fetchExcInvalid or TLB_fetchExcNotFound) and (not TLB_fetchIsWrite);
                      TLB_ExcWrite <= (TLB_fetchExcInvalid or TLB_fetchExcNotFound) and TLB_fetchIsWrite;
                      TLB_ExcMiss  <= TLB_fetchExcNotFound;

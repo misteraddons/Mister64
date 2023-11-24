@@ -17,6 +17,7 @@ entity cpu is
       reset_1x              : in  std_logic;
       reset_93              : in  std_logic;
       
+      INSTRCACHEON          : in  std_logic;
       DATACACHEON           : in  std_logic;
       DATACACHESLOW         : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB     : in  std_logic;
@@ -29,6 +30,7 @@ entity cpu is
       error_FPU             : out std_logic := '0';
       error_exception       : out std_logic := '0';
       error_fifo            : out std_logic := '0';
+      error_TLB             : out std_logic := '0';
       
       mem_request           : out std_logic := '0';
       mem_rnw               : out std_logic := '0'; 
@@ -185,10 +187,13 @@ architecture arch of cpu is
    signal FetchAddr                    : unsigned(63 downto 0) := (others => '0'); 
    signal FetchAddr1                   : unsigned(63 downto 0) := (others => '0'); 
    signal FetchAddr2                   : unsigned(63 downto 0) := (others => '0'); 
+   signal FetchAddrTLBMuxed1           : unsigned(31 downto 0) := (others => '0'); 
+   signal FetchAddrTLBMuxed2           : unsigned(31 downto 0) := (others => '0'); 
    signal FetchAddrSelect              : std_logic;
    signal fetchCache                   : std_logic;
    signal useCached_data               : std_logic := '0';
    
+   signal fill_addrTag                 : unsigned(28 downto 0) := (others => '0'); 
    signal instrcache_request           : std_logic;
    signal instrcache_active            : std_logic := '0';
    signal instrcache_hit               : std_logic;
@@ -458,6 +463,10 @@ architecture arch of cpu is
    signal executeCOP1ReadEnable        : std_logic := '0';
    signal execute_unstallFPUForward    : std_logic := '0';
    signal execute_ERET                 : std_logic := '0';
+   signal execute_TLBR                 : std_logic := '0';
+   signal execute_TLBWI                : std_logic := '0';
+   signal execute_TLBWR                : std_logic := '0';
+   signal execute_TLBP                 : std_logic := '0';
 
    signal hiloWait                     : integer range 0 to 69;
    
@@ -472,10 +481,6 @@ architecture arch of cpu is
    signal EXECOP0WriteValue            : unsigned(63 downto 0) := (others => '0');
    signal EXECacheAddr                 : unsigned(28 downto 0);
    signal EXEExceptionMem              : std_logic;
-   signal EXETLBR                      : std_logic;
-   signal EXETLBWI                     : std_logic;
-   signal EXETLBWR                     : std_logic;
-   signal EXETLBP                      : std_logic;
    signal EXETLBMapped                 : std_logic;
    signal EXETLBDataAccess             : std_logic;
    
@@ -518,11 +523,15 @@ architecture arch of cpu is
    signal irqTrigger                   : std_logic;
    signal TLBDone                      : std_logic;
    
+   signal TLB_ss_load                  : std_logic;
    signal TLB_instrMapped              : std_logic;
    signal TLB_instrReq                 : std_logic;
+   signal TLB_instrUseCache            : std_logic;
    signal TLB_instrStall               : std_logic;
    signal TLB_instrUnStall             : std_logic;
-   signal TLB_instrAddrOut             : unsigned(31 downto 0);   
+   signal TLB_instrAddrOutFound        : unsigned(31 downto 0);   
+   signal TLB_instrAddrOutLookup       : unsigned(31 downto 0);   
+   signal TLB_dataUseCache             : std_logic;
    signal TLB_dataStall                : std_logic;
    signal TLB_dataUnStall              : std_logic;
    signal TLB_dataAddrOut              : unsigned(31 downto 0);
@@ -989,18 +998,20 @@ begin
       ram_active        => instrcache_active,
       ram_grant         => rdram_granted2X,
       ram_done          => mem_finished_instr,
-      ram_addr          => mem_address(28 downto 0),
       ddr3_DOUT         => ddr3_DOUT,      
       ddr3_DOUT_READY   => ddr3_DOUT_READY,
       
       read_select       => FetchAddrSelect,
       read_addr1        => FetchAddr1(28 downto 0),
       read_addr2        => FetchAddr2(28 downto 0),
+      read_addrCompare1 => FetchAddrTLBMuxed1(28 downto 0),
+      read_addrCompare2 => FetchAddrTLBMuxed2(28 downto 0),
       read_hit          => instrcache_hit,
       read_data         => instrcache_data,
       
       fill_request      => instrcache_fill,
-      fill_addr         => mem1_address(28 downto 0),
+      fill_addrData     => mem1_address(28 downto 0),
+      fill_addrTag      => fill_addrTag,
       fill_done         => instrcache_fill_done,
       
       CacheCommandEna   => cache_commandEnable,
@@ -1014,16 +1025,22 @@ begin
    
    -- todo: only in kernelmode and only in 32bit mode
    -- todo: check both addresses and TLB type!
-   fetchCache     <= '1' when (FetchAddr1(31 downto 29) = "100") else '0';
+   fetchCache     <= '0' when (INSTRCACHEON = '0') else
+                     TLB_instrUseCache when (TLB_instrMapped = '1') else
+                     '1' when (FetchAddr1(31 downto 29) = "100") else 
+                     '0';
    
    FetchAddr <= FetchAddr2 when (FetchAddrSelect = '1') else FetchAddr1;
+   
+   FetchAddrTLBMuxed1 <= TLB_instrAddrOutFound when (TLB_instrMapped = '1') else FetchAddr1(31 downto 0);
+   FetchAddrTLBMuxed2 <= TLB_instrAddrOutFound when (TLB_instrMapped = '1') else FetchAddr2(31 downto 0);
 
    TLB_instrMapped <= '1' when (privilegeMode = "00" and (FetchAddr(31 downto 29) < 4 or FetchAddr(31 downto 29) = 6 or FetchAddr(31 downto 29) = 7)) else
                       '1' when (privilegeMode = "01" and (FetchAddr(31 downto 29) < 4 or FetchAddr(31 downto 29) = 6)) else
                       '1' when (privilegeMode = "10" and (FetchAddr(31 downto 29) < 4)) else
                       '0';
                       
-   TLB_instrReq <= '1' when (TLB_instrMapped = '1' and stall = 0) else '0';
+   TLB_instrReq <= '1' when (TLB_instrMapped = '1' and (stall = 0 or TLB_ss_load = '1')) else '0';
    
    process (clk93)
    begin
@@ -1031,15 +1048,19 @@ begin
       
          instrcache_fill <= '0';
          mem1_request    <= '0';
+         TLB_ss_load     <= '0';
          
          if (reset_93 = '1') then
                      
-            mem1_request   <= '1';
+            mem1_request   <= not TLB_instrMapped;
+            TLB_ss_load    <= TLB_instrMapped;
             if (ss_in(16)(3) = '1') then
                mem1_address   <= unsigned(ss_in(5)(31 downto 0)); -- last was branch -> should be patched in the savestate already
+               fill_addrTag   <= unsigned(ss_in(5)(28 downto 0));
                PC             <= unsigned(ss_in(5)); 
             else
                mem1_address   <= unsigned(ss_in(0)(31 downto 0)); -- x"FFFFFFFFBFC00000";    
+               fill_addrTag   <= unsigned(ss_in(0)(28 downto 0));
                PC             <= unsigned(ss_in(0)); -- x"FFFFFFFFBFC00000";                    
             end if;
             stall1         <= '1';
@@ -1075,20 +1096,32 @@ begin
                      stall1         <= '0';
                      opcode0        <= (others => '0');
                   else
-                     mem1_request    <= '1';
-                     mem1_address    <= TLB_instrAddrOut;
+                     mem1_address    <= TLB_instrAddrOutLookup;
+                     useCached_data  <= TLB_instrUseCache;
+                     if (TLB_instrUseCache = '1') then
+                        instrcache_fill <= '1';
+                     else
+                        mem1_request    <= '1';
+                     end if;
                   end if;
                end if;
             
             elsif (stall = 0 or fetchReady = '0') then
             
                PCold0             <= FetchAddr;
-               mem1_address       <= FetchAddr(31 downto 0);
                PC                 <= FetchAddr;
                useCached_data     <= fetchCache;
                fetchReady         <= '1';
-     
+               
                if (TLB_instrMapped = '1') then
+                  mem1_address <= TLB_instrAddrOutFound;
+                  fill_addrTag <= FetchAddr(28 downto 0);
+               else
+                  mem1_address <= FetchAddr(31 downto 0);
+                  fill_addrTag <= FetchAddr(28 downto 0);
+               end if;
+      
+               if (TLB_instrStall = '1') then
                   stall1          <= '1'; 
                elsif (fetchCache = '1') then
                   if (instrcache_hit = '0') then
@@ -2066,7 +2099,7 @@ begin
    
    -- use two nextaddress/branch paths with 2 tag rams, so different paths can be calculated in parallel to improve timing
    
-   FetchAddrSelect <= '0'  when (exception = '1' or exceptionStage1 = '1' or executeIgnoreNext = '1' or decodeNew = '0') else
+   FetchAddrSelect <= '0'  when (exception = '1' or executeIgnoreNext = '1' or decodeNew = '0') else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BGEZ and (cmpZero = '1' or cmpNegative = '0'))  else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BLTZ and cmpNegative = '1')                     else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BEQ  and cmpEqual = '1')                        else
@@ -2167,11 +2200,6 @@ begin
    EXECOP0WriteValue    <= 39x"0" & calcMemAddr(28 downto 4)                 when (decodeSetLL = '1') else -- todo: should be modified by TLB and region check
                            unsigned(resize(signed(value2(31 downto 0)), 64)) when (decodeCOP64 = '0') else
                            value2;
-                           
-   EXETLBR  <= decodeTLBR  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
-   EXETLBWI <= decodeTLBWI when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
-   EXETLBWR <= decodeTLBWR when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
-   EXETLBP  <= decodeTLBP  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
 
    -- 64bit mode?
    EXETLBMapped <= '1' when (privilegeMode = "00" and (calcMemAddr(31 downto 29) < 4 or calcMemAddr(31 downto 29) = 6 or calcMemAddr(31 downto 29) = 7)) else
@@ -2375,12 +2403,7 @@ begin
                executeNew <= '1';
             end if;
             
-            -- TLB unstall
-            if (TLBDone = '1') then
-               stall3     <= '0';
-               executeNew <= '1';
-            end if;
-            
+            -- TLB unstall            
             if (TLB_dataUnStall = '1') then
                executeMemAddress   <= 32x"0" & TLB_dataAddrOut;
                executeNew          <= '1';
@@ -2498,6 +2521,11 @@ begin
                      executeCacheEnable            <= decodeCacheEnable;
                      executeCacheCommand           <= decodeSource2;
                      
+                     execute_TLBR                  <= decodeTLBR; 
+                     execute_TLBWI                 <= decodeTLBWI;
+                     execute_TLBWR                 <= decodeTLBWR;
+                     execute_TLBP                  <= decodeTLBP; 
+                     
                      -- new mul/div
                      if (decodecalcMULT = '1') then
                         hilocalc <= HILOCALC_MULT;
@@ -2608,10 +2636,6 @@ begin
                         if (FPU_command_done = '1' or FPU_command_ena = '0') then
                            execute_unstallFPUForward <= '1';
                         end if;
-                     end if;
-                     
-                     if (decodeTLBR = '1' or decodeTLBWI = '1' or decodeTLBWR = '1' or decodeTLBP = '1') then
-                        stall3 <= '1';
                      end if;
                         
                      if (TLB_dataStall = '1') then
@@ -2898,12 +2922,21 @@ begin
                   if (datacache_CmdStall = '1') then
                      stall4 <= '1';
                   end if;
+                  
+                  if (execute_TLBP = '1') then
+                     stall4 <= '1';
+                  end if;
 
                end if;
                
             end if;
             
             if (datacache_CmdDone = '1') then
+               stall4        <= '0';
+               writebackNew  <= '1';
+            end if;
+            
+            if (TLBDone = '1') then
                stall4        <= '0';
                writebackNew  <= '1';
             end if;
@@ -3114,74 +3147,79 @@ begin
    icop0 : entity work.cpu_cop0
    port map
    (
-      clk93             => clk93,
-      ce                => ce_93,   
-      stall             => stall,
-      stall4Masked      => stall4Masked,
-      executeNew        => executeNew,
-      reset             => reset_93,
+      clk93                   => clk93,
+      ce                      => ce_93,   
+      stall                   => stall,
+      stall4Masked            => stall4Masked,
+      executeNew              => executeNew,
+      reset                   => reset_93,
+            
+      error_exception         => error_exception,
+      error_TLB               => error_TLB,
       
-      error_exception   => error_exception,
-
-      irqRequest        => irqRequest,
-      irqTrigger        => irqTrigger,
-      decode_irq        => decode_irq,
+      irqRequest              => irqRequest,
+      irqTrigger              => irqTrigger,
+      decode_irq              => decode_irq,
 
 -- synthesis translate_off
-      cop0_export       => cop0_export,
+      cop0_export             => cop0_export,
 -- synthesis translate_on
 
-      eret              => execute_ERET,
-      exception3        => exceptionNew3,
-      exception1        => exceptionNew1,
-      exceptionFPU      => exceptionFPU,
-      exceptionCode_1   => "0000", -- todo
-      exceptionCode_3   => exceptionCode_3,
-      exception_COP     => exception_COP,
-      isDelaySlot       => executeBranchdelaySlot,
-      nextDelaySlot     => EXEBranchdelaySlot,
-      pcOld1            => PCold1,
+      eret                    => execute_ERET,
+      exception3              => exceptionNew3,
+      exception1              => exceptionNew1,
+      exceptionFPU            => exceptionFPU,
+      exceptionCode_1         => "0000", -- todo
+      exceptionCode_3         => exceptionCode_3,
+      exception_COP           => exception_COP,
+      isDelaySlot             => executeBranchdelaySlot,
+      nextDelaySlot           => EXEBranchdelaySlot,
+      pcOld1                  => PCold1,
+            
+      eretPC                  => eretPC,
+      exceptionPC             => exceptionPC,
+      exception               => exception,   
+      exceptionStage1         => exceptionStage1,   
+            
+      COP1_enable             => COP1_enable,
+      COP2_enable             => COP2_enable,
+      fpuRegMode              => fpuRegMode,
+      privilegeMode           => privilegeMode,
+      bit64region             => bit64region,
       
-      eretPC            => eretPC,
-      exceptionPC       => exceptionPC,
-      exception         => exception,   
-      exceptionStage1   => exceptionStage1,   
+      writeEnable             => executeCOP0WriteEnable,
+      regIndex                => executeCOP0Register,
+      writeValue              => executeCOP0WriteValue,
+      readValue               => COP0ReadValue,
+            
+      TLBR                    => execute_TLBR,  
+      TLBWI                   => execute_TLBWI, 
+      TLBWR                   => execute_TLBWR, 
+      TLBP                    => execute_TLBP,  
+      TLBDone                 => TLBDone,
+            
+      TLB_instrReq            => TLB_instrReq,
+      TLB_ss_load             => TLB_ss_load,
+      TLB_instrAddrIn         => FetchAddr,
+      TLB_instrUseCache       => TLB_instrUseCache,
+      TLB_instrStall          => TLB_instrStall,
+      TLB_instrUnStall        => TLB_instrUnStall,
+      TLB_instrAddrOutFound   => TLB_instrAddrOutFound,
+      TLB_instrAddrOutLookup  => TLB_instrAddrOutLookup,
       
-      COP1_enable       => COP1_enable,
-      COP2_enable       => COP2_enable,
-      fpuRegMode        => fpuRegMode,
-      privilegeMode     => privilegeMode,
-      bit64region       => bit64region,
-
-      writeEnable       => executeCOP0WriteEnable,
-      regIndex          => executeCOP0Register,
-      writeValue        => executeCOP0WriteValue,
-      readValue         => COP0ReadValue,
-      
-      TLBR              => EXETLBR,   
-      TLBWI             => EXETLBWI,  
-      TLBWR             => EXETLBWR,  
-      TLBP              => EXETLBP,   
-      TLBDone           => TLBDone,
-      
-      TLB_instrReq      => TLB_instrReq,
-      TLB_instrAddrIn   => FetchAddr,
-      TLB_instrStall    => TLB_instrStall,
-      TLB_instrUnStall  => TLB_instrUnStall,
-      TLB_instrAddrOut  => TLB_instrAddrOut,
-      
-      TLB_dataReq       => EXETLBDataAccess,   
-      TLB_dataIsWrite   => decodeMemWriteEnable,   
-      TLB_dataAddrIn    => calcMemAddr,
-      TLB_dataStall     => TLB_dataStall,
-      TLB_dataUnStall   => TLB_dataUnStall,
-      TLB_dataAddrOut   => TLB_dataAddrOut,
-      
-      SS_reset          => SS_reset,    
-      SS_DataWrite      => SS_DataWrite,
-      SS_Adr            => SS_Adr,      
-      SS_wren_CPU       => SS_wren_CPU, 
-      SS_rden_CPU       => SS_rden_CPU 
+      TLB_dataReq             => EXETLBDataAccess,   
+      TLB_dataIsWrite         => decodeMemWriteEnable,   
+      TLB_dataAddrIn          => calcMemAddr,
+      TLB_dataUseCache        => TLB_dataUseCache,
+      TLB_dataStall           => TLB_dataStall,
+      TLB_dataUnStall         => TLB_dataUnStall,
+      TLB_dataAddrOut         => TLB_dataAddrOut,
+            
+      SS_reset                => SS_reset,    
+      SS_DataWrite            => SS_DataWrite,
+      SS_Adr                  => SS_Adr,      
+      SS_wren_CPU             => SS_wren_CPU, 
+      SS_rden_CPU             => SS_rden_CPU 
    );
    
    icpu_mul : entity work.cpu_mul

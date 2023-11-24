@@ -207,8 +207,10 @@ begin
             hpos                                        <= SS_nextHCount(11 downto 0);
             if (VITEST = '1') then
                vpos_half                                <= (others => '0');
+               vpos                                     <= (others => '0');
             else
                vpos_half                                <= SS_VI_CURRENT(9 downto 1) & '0';
+               vpos                                     <= SS_VI_CURRENT(9 downto 1);
             end if;
                   
          elsif (ce = '1') then

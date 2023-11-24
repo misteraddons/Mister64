@@ -125,6 +125,7 @@ begin
       CICTYPE               => "0000",
       RAMSIZE8              => '1',
       FASTRAM               => '0',
+      INSTRCACHEON          => '1',
       DATACACHEON           => '1',
       DATACACHESLOW         => "0000",
       DATACACHEFORCEWEB     => '0',

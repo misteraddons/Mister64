@@ -38,6 +38,7 @@ entity n64top is
       CICTYPE                 : in  std_logic_vector(3 downto 0);
       RAMSIZE8                : in  std_logic;
       FASTRAM                 : in  std_logic;
+      INSTRCACHEON            : in  std_logic;
       DATACACHEON             : in  std_logic;
       DATACACHESLOW           : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB       : in  std_logic; 
@@ -220,6 +221,7 @@ architecture arch of n64top is
    signal error_vi               : std_logic;
    signal error_RDPMEMMUX        : std_logic;
    signal errorCPU_fifo          : std_logic;
+   signal errorCPU_TLB           : std_logic;
   
    -- irq
    signal irqRequest             : std_logic;
@@ -507,7 +509,7 @@ begin
    
    -- error codes
    process (reset_intern_1x, errorMEMMUX          ) begin if (errorMEMMUX           = '1') then errorCode( 0) <= '1'; elsif (reset_intern_1x = '1') then errorCode( 0) <= '0'; end if; end process;
-   --process (reset_intern_1x, errorCPU_instr       ) begin if (errorCPU_instr        = '1') then errorCode( 1) <= '1'; elsif (reset_intern_1x = '1') then errorCode( 1) <= '0'; end if; end process;
+   process (reset_intern_1x, errorCPU_instr       ) begin if (errorCPU_instr        = '1') then errorCode( 1) <= '1'; elsif (reset_intern_1x = '1') then errorCode( 1) <= '0'; end if; end process;
    process (reset_intern_1x, errorCPU_stall       ) begin if (errorCPU_stall        = '1') then errorCode( 2) <= '1'; elsif (reset_intern_1x = '1') then errorCode( 2) <= '0'; end if; end process;
    process (reset_intern_1x, errorDDR3            ) begin if (errorDDR3             = '1') then errorCode( 3) <= '1'; elsif (reset_intern_1x = '1') then errorCode( 3) <= '0'; end if; end process;
    process (reset_intern_1x, errorCPU_FPU         ) begin if (errorCPU_FPU          = '1') then errorCode( 4) <= '1'; elsif (reset_intern_1x = '1') then errorCode( 4) <= '0'; end if; end process;
@@ -533,8 +535,7 @@ begin
    process (reset_intern_1x, error_vi             ) begin if (error_vi              = '1') then errorCode(24) <= '1'; elsif (reset_intern_1x = '1') then errorCode(24) <= '0'; end if; end process;
    process (reset_intern_1x, error_RDPMEMMUX      ) begin if (error_RDPMEMMUX       = '1') then errorCode(25) <= '1'; elsif (reset_intern_1x = '1') then errorCode(25) <= '0'; end if; end process;
    process (reset_intern_1x, errorCPU_fifo        ) begin if (errorCPU_fifo         = '1') then errorCode(26) <= '1'; elsif (reset_intern_1x = '1') then errorCode(26) <= '0'; end if; end process;
-   
-   errorCode(27) <= '0';
+   process (reset_intern_1x, errorCPU_TLB         ) begin if (errorCPU_TLB          = '1') then errorCode(27) <= '1'; elsif (reset_intern_1x = '1') then errorCode(27) <= '0'; end if; end process;
    
    process (clk1x)
    begin
@@ -1395,6 +1396,7 @@ begin
       reset_1x             => reset_intern_1x,
       reset_93             => reset_intern_93,
       
+      INSTRCACHEON         => INSTRCACHEON,
       DATACACHEON          => DATACACHEON,
       DATACACHESLOW        => DATACACHESLOW,
       DATACACHEFORCEWEB    => DATACACHEFORCEWEB,
@@ -1407,6 +1409,7 @@ begin
       error_FPU            => errorCPU_FPU,
       error_exception      => errorCPU_exception,
       error_fifo           => errorCPU_fifo,
+      error_TLB            => errorCPU_TLB,
          
       mem_request          => mem_request,  
       mem_rnw              => mem_rnw,         
