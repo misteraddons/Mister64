@@ -37,6 +37,9 @@ entity cpu_instrcache is
       CacheCommandEna   : in  std_logic;
       CacheCommand      : in  unsigned(4 downto 0);
       CacheCommandAddr  : in  unsigned(31 downto 0);
+      
+      TagLo_Valid       : in  std_logic;
+      TagLo_Addr        : in  unsigned(19 downto 0);
 
       SS_reset          : in  std_logic
    );
@@ -201,6 +204,10 @@ begin
                      -- todo: should only clear if tag matches
                      tag_wren_a     <= '1';
                      tag_data_a     <= (others => '0');
+                     tag_address_a  <= std_logic_vector(CacheCommandAddr(13 downto 5));
+                  elsif (CacheCommandEna = '1' and CacheCommand = 5x"08") then
+                     tag_wren_a     <= '1';
+                     tag_data_a     <= TagLo_Valid & std_logic_vector(TagLo_Addr(16 downto 0));
                      tag_address_a  <= std_logic_vector(CacheCommandAddr(13 downto 5));
                   elsif (fill_request = '1' or fill_latched = '1') then
                      state          <= FILL;

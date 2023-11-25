@@ -535,6 +535,13 @@ architecture arch of cpu is
    signal TLB_dataStall                : std_logic;
    signal TLB_dataUnStall              : std_logic;
    signal TLB_dataAddrOut              : unsigned(31 downto 0);
+   
+   signal TagLo_Valid                  : std_logic;
+   signal TagLo_Dirty                  : std_logic;
+   signal TagLo_Addr                   : unsigned(19 downto 0);
+   
+   signal writeDatacacheTagEna         : std_logic;
+   signal writeDatacacheTagValue       : unsigned(21 downto 0);
 
    -- COP1
    signal cop1_stage4_writeEnable      : std_logic := '0';
@@ -1018,6 +1025,9 @@ begin
       CacheCommand      => executeCacheCommand,
       CacheCommandAddr  => executeMemAddress(31 downto 0),
       
+      TagLo_Valid       => TagLo_Valid,
+      TagLo_Addr        => TagLo_Addr,
+                            
       SS_reset          => SS_reset
    );
                      
@@ -1880,6 +1890,10 @@ begin
                         
                      when 16#2F# => -- Cache
                         decodeCacheEnable       <= '1';
+                        case (to_integer(decSource2)) is
+                           when 16#00# | 16#01# | 16#05# | 16#08# | 16#09# | 16#0D# | 16#10# | 16#11# | 16#15# | 16#19# => null;
+                           when others => error_instr <= '1';
+                        end case;
 
                      when 16#30# => -- LL
                         decodeMemReadEnable     <= '1';
@@ -2706,6 +2720,13 @@ begin
       CachecommandStall => datacache_CmdStall,
       CachecommandDone  => datacache_CmdDone,    
       
+      TagLo_Valid       => TagLo_Valid,
+      TagLo_Dirty       => TagLo_Dirty,
+      TagLo_Addr        => TagLo_Addr, 
+      
+      writeTagEna       => writeDatacacheTagEna,      
+      writeTagValue     => writeDatacacheTagValue,
+      
       SS_reset          => SS_reset
    );
 
@@ -3191,6 +3212,13 @@ begin
       regIndex                => executeCOP0Register,
       writeValue              => executeCOP0WriteValue,
       readValue               => COP0ReadValue,
+      
+      TagLo_Valid             => TagLo_Valid,
+      TagLo_Dirty             => TagLo_Dirty,
+      TagLo_Addr              => TagLo_Addr, 
+      
+      writeDatacacheTagEna    => writeDatacacheTagEna,      
+      writeDatacacheTagValue  => writeDatacacheTagValue,
             
       TLBR                    => execute_TLBR,  
       TLBWI                   => execute_TLBWI, 

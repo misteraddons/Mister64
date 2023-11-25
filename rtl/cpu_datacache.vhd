@@ -51,6 +51,13 @@ entity cpu_datacache is
       CacheCommandAddr  : in  unsigned(31 downto 0);
       CachecommandStall : out std_logic;
       CachecommandDone  : out std_logic := '0';
+      
+      TagLo_Valid       : in  std_logic;
+      TagLo_Dirty       : in  std_logic;
+      TagLo_Addr        : in  unsigned(19 downto 0);
+      
+      writeTagEna       : out std_logic := '0';
+      writeTagValue     : out unsigned(21 downto 0) := (others => '0');
 
       SS_reset          : in  std_logic
    );
@@ -291,6 +298,7 @@ begin
          CachecommandDone  <= '0';
          tag_wren_cmd      <= '0';
          wb_done           <= '0';
+         writeTagEna       <= '0';
          
          if (ce_fetch = '1') then
             tag_addr_1   <= tag_addr;
@@ -359,6 +367,8 @@ begin
                      ram_reqAddr    <= "000" & unsigned(tag_q_b(16 downto 0)) & RW_addr(11 downto 4) & "0000";
                      writeback_addr <= "000" & unsigned(tag_q_b(16 downto 0)) & RW_addr(11 downto 4) & "0000";
                      tag_data_addr  <= std_logic_vector(RW_addr(12 downto 4));
+                     
+                     writeTagValue  <= tag_q_b(17) & tag_q_b(18) & "000" & unsigned(tag_q_b(16 downto 0)); -- valid & dirty & 20 bit address
                   
                      case (CacheCommand) is
                      
@@ -370,10 +380,11 @@ begin
                            tag_data_cmd    <= "00" & tag_q_b(16 downto 0);
                            
                         when 5x"05" => -- dcache index load tag
-                           -- todo: write tag content to cop0_28
+                           writeTagEna <= '1';
                            
                         when 5x"09" => -- dcache index store tag 
-                           -- todo: write tag from cop0_28
+                           tag_wren_cmd    <= '1';
+                           tag_data_cmd    <= TagLo_Dirty & TagLo_Valid & std_logic_vector(TagLo_Addr(16 downto 0));
                            
                         when 5x"0D" => -- dcache create dirty exclusive
                            if (tag_q_b(18) = '1' and (tag_q_b(17) = '0' or unsigned(tag_q_b(16 downto 0)) /= tag_addr_1(28 downto 12))) then

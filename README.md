@@ -17,7 +17,7 @@ Errors are hex encoded by bits, so the error code can represent more than 1 erro
 
 List of Errors:
 - Bit 0 - Memory access to unmapped area
-- Bit 1 - CPU Instruction not implemented
+- Bit 1 - CPU Instruction not implemented, currently used for cache command only
 - Bit 2 - CPU stall timeout
 - Bit 3 - DDR3 timeout    
 - Bit 4 - FPU internal exception    
@@ -43,6 +43,7 @@ List of Errors:
 - Bit 24 - VI line processing wasn't able to complete in time
 - Bit 25 - RDP Mux missed request
 - Bit 26 - CPU Writefifo full (should never happen, internal CPU logic bug)
+- Bit 27 - TLB access from multiple sources in parallel (should never happen, internal CPU logic bug)
   
 ## Status
 

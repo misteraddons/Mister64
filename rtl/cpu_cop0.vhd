@@ -53,6 +53,13 @@ entity cpu_cop0 is
       regIndex                : in  unsigned(4 downto 0);
       writeValue              : in  unsigned(63 downto 0);
       readValue               : out unsigned(63 downto 0) := (others => '0');
+      
+      TagLo_Valid             : out std_logic;
+      TagLo_Dirty             : out std_logic;
+      TagLo_Addr              : out unsigned(19 downto 0);
+      
+      writeDatacacheTagEna    : in  std_logic;
+      writeDatacacheTagValue  : in  unsigned(21 downto 0);
             
       TLBR                    : in  std_logic;
       TLBWI                   : in  std_logic;
@@ -297,6 +304,10 @@ begin
    fpuRegMode    <= COP0_12_SR_floatingPointMode;
    privilegeMode <= COP0_12_SR_privilegeMode;
    bit64region   <= bit64mode;
+   
+   TagLo_Valid   <= COP0_28_TAGLO_primaryCacheState(1);
+   TagLo_Dirty   <= COP0_28_TAGLO_primaryCacheState(0);
+   TagLo_Addr    <= COP0_28_TAGLO_physicalAddress;
    
    process (all)
    begin
@@ -550,6 +561,7 @@ begin
             TLBDone                         <= '0';
             TLB_Instr_fetchReq_saved        <= '0';
             TLB_Data_fetchReq_saved         <= '0';
+            tlbMiss                         <= '0';
             
          elsif (ce = '1') then
          
@@ -708,7 +720,7 @@ begin
                   end case;
                      
                end if; -- write enable
-               
+
                -- eret
                if (eret = '1') then
                   if (COP0_12_SR_errorLevel = '1') then
@@ -732,6 +744,11 @@ begin
                end case;
                
             end if; -- stall
+            
+            if (writeDatacacheTagEna = '1') then
+               COP0_28_TAGLO_primaryCacheState <= writeDatacacheTagValue(21 downto 20);
+               COP0_28_TAGLO_physicalAddress   <= writeDatacacheTagValue(19 downto 0);
+            end if;
 
             -- new exception
             nextEPC := pcOld1;
@@ -754,10 +771,12 @@ begin
             
             if (exception = '0') then
                if (stall = 0 or exceptionFPU = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
+               
+                  tlbMiss <= '0';
+               
                   if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or exception1 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or exceptionStage1 = '1') then
                   
                      exception <= '1';
-                     tlbMiss   <= '0';
                      
                      COP0_12_SR_exceptionLevel   <= '1';
                      

@@ -42,9 +42,9 @@ src/tb/cpu_mul.vhd ^
 ../../rtl/cpu_FPU.vhd ^
 ../../rtl/cpu.vhd ^
 ../../rtl/memorymux.vhd ^
+../../rtl/pif_cpakinit.vhd ^
 ../../rtl/Gamepad.vhd ^
 ../../rtl/pifrom_ntsc_fast.vhd ^
-../../rtl/pif_cpakinit.vhd ^
 ../../rtl/PIF.vhd ^
 ../../rtl/RSP_package.vhd ^
 ../../rtl/RSP_divtable.vhd ^
