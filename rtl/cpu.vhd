@@ -442,11 +442,12 @@ architecture arch of cpu is
    signal executeBranchdelaySlot       : std_logic := '0';
    signal resultTarget                 : unsigned(4 downto 0) := (others => '0');
    signal resultData                   : unsigned(63 downto 0) := (others => '0');
-   signal executeMem64Bit              : std_logic;
-   signal executeMemWriteEnable        : std_logic;
+   signal executeMem64Bit              : std_logic := '0';
+   signal executeMemWriteEnable        : std_logic := '0';
+   signal executeMemUseCache           : std_logic := '0';
    signal executeMemWriteData          : unsigned(63 downto 0) := (others => '0');
    signal executeMemWriteMask          : std_logic_vector(7 downto 0) := (others => '0');
-   signal executeMemAddress            : unsigned(63 downto 0) := (others => '0');
+   signal executeMemAddress            : unsigned(31 downto 0) := (others => '0');
    signal executeMemReadEnable         : std_logic := '0';
    signal executeMemReadLastData       : unsigned(63 downto 0) := (others => '0');
    signal executeCOP0WriteEnable       : std_logic := '0';
@@ -479,7 +480,7 @@ architecture arch of cpu is
    signal EXEMemWriteData              : unsigned(63 downto 0) := (others => '0');
    signal EXEMemWriteMask              : std_logic_vector(7 downto 0) := (others => '0');
    signal EXECOP0WriteValue            : unsigned(63 downto 0) := (others => '0');
-   signal EXECacheAddr                 : unsigned(28 downto 0);
+   signal EXECacheAddr                 : unsigned(31 downto 0);
    signal EXEExceptionMem              : std_logic;
    signal EXETLBMapped                 : std_logic;
    signal EXETLBDataAccess             : std_logic;
@@ -1023,7 +1024,7 @@ begin
       
       CacheCommandEna   => cache_commandEnable,
       CacheCommand      => executeCacheCommand,
-      CacheCommandAddr  => executeMemAddress(31 downto 0),
+      CacheCommandAddr  => executeMemAddress,
       
       TagLo_Valid       => TagLo_Valid,
       TagLo_Addr        => TagLo_Addr,
@@ -2225,9 +2226,12 @@ begin
 
    ---------------------- load/store ------------------
    
-   EXECacheAddr  <= calcMemAddr(28 downto 3) & "000" when (decodeLoadType = LOADTYPE_LEFT64 or decodeLoadType = LOADTYPE_RIGHT64) else 
-                    calcMemAddr(28 downto 2) & "00"  when (decodeLoadType = LOADTYPE_LEFT or decodeLoadType = LOADTYPE_RIGHT) else 
-                    calcMemAddr(28 downto 0);  
+   EXECacheAddr(31 downto 3) <= calcMemAddr(31 downto 3) when (EXETLBMapped = '1') else 
+                                "000" & calcMemAddr(28 downto 3);
+                                
+   EXECacheAddr(2 downto 0)  <= "000"                  when (decodeLoadType = LOADTYPE_LEFT64 or decodeLoadType = LOADTYPE_RIGHT64) else 
+                                calcMemAddr(2) & "00"  when (decodeLoadType = LOADTYPE_LEFT or decodeLoadType = LOADTYPE_RIGHT) else 
+                                calcMemAddr(2 downto 0);  
    
    
    process (all)
@@ -2367,7 +2371,7 @@ begin
                
                if (executeStallFromMEM = '1') then               
                   if (executeMemReadEnable = '1' and executeCOP1ReadEnable = '0') then
-                     if (to_integer(unsigned(executeMemAddress(31 downto 29))) = 4 and privilegeMode = "00" and DATACACHEON_intern = '1') then
+                     if (executeMemUseCache = '1') then
                         if (datacache_readdone = '1') then
                            stall3 <= '0';
                         end if;
@@ -2419,7 +2423,7 @@ begin
             
             -- TLB unstall            
             if (TLB_dataUnStall = '1') then
-               executeMemAddress   <= 32x"0" & TLB_dataAddrOut;
+               executeMemAddress   <= TLB_dataAddrOut;
                executeNew          <= '1';
                if (exception = '0') then
                   executeStallFromMEM <= '1';
@@ -2446,9 +2450,9 @@ begin
                executeMemReadLastData  <= value2;           
 
                if (EXETLBDataAccess = '1') then
-                  executeMemAddress <= 32x"0" & TLB_dataAddrOut;
+                  executeMemAddress <= TLB_dataAddrOut;
                else
-                  executeMemAddress <= calcMemAddr; 
+                  executeMemAddress <= "000" & calcMemAddr(28 downto 0);
                end if;
                
                executeCOP0WriteValue   <= EXECOP0WriteValue; 
@@ -2529,6 +2533,15 @@ begin
                            llBit <= '1';
                            executeCOP0WriteEnable <= '1';
                            executeCOP0Register    <= to_unsigned(17,5);
+                        end if;
+                     end if;
+
+                     executeMemUseCache <= '0';
+                     if (EXETLBDataAccess = '1') then
+                        executeMemUseCache <= '0'; -- todo
+                     else
+                        if (to_integer(unsigned(calcMemAddr(31 downto 29))) = 4 and privilegeMode = "00" and DATACACHEON_intern = '1') then
+                           executeMemUseCache <= '1';
                         end if;
                      end if;
 
@@ -2716,7 +2729,7 @@ begin
       
       CacheCommandEna   => cache_commandEnable,
       CacheCommand      => executeCacheCommand,
-      CacheCommandAddr  => executeMemAddress(31 downto 0),
+      CacheCommandAddr  => executeMemAddress,
       CachecommandStall => datacache_CmdStall,
       CachecommandDone  => datacache_CmdDone,    
       
@@ -2740,7 +2753,7 @@ begin
             
       mem4_request         <= '0';
       mem4_req64           <= executeMem64Bit;
-      mem4_address         <= executeMemAddress(31 downto 0);
+      mem4_address         <= executeMemAddress;
       mem4_rnw             <= '1';
       mem4_dataWrite       <= std_logic_vector(executeMemWriteData);
       mem4_writeMask       <= executeMemWriteMask;
@@ -2748,7 +2761,7 @@ begin
       datacache_writeena   <= '0';
       datacache_readena    <= '0';
       
-      datacache_addr   <= executeMemAddress(31 downto 0);
+      datacache_addr   <= executeMemAddress;
       if (executeMemReadEnable = '1') then
          if (executeLoadType = LOADTYPE_LEFT or executeLoadType = LOADTYPE_RIGHT) then 
             datacache_addr(1 downto 0) <= "00";
@@ -2767,7 +2780,7 @@ begin
          if (executeMemWriteEnable = '1') then
             skipmem := '0';
          
-            if (to_integer(unsigned(executeMemAddress(31 downto 29))) = 4 and privilegeMode = "00" and DATACACHEON_intern = '1') then
+            if (executeMemUseCache = '1') then
                datacache_writeena <= '1';
                skipmem            := '1';
                if (datacache_writedone = '0') then
@@ -2794,7 +2807,7 @@ begin
          if (executeMemReadEnable = '1') then
             skipmem := '0';
             
-            if (to_integer(unsigned(executeMemAddress(31 downto 29))) = 4 and privilegeMode = "00" and DATACACHEON_intern = '1') then
+            if (executeMemUseCache = '1') then
                datacache_readena  <= '1';
                skipmem            := '1';
                if (datacache_readdone = '0') then
@@ -2824,7 +2837,7 @@ begin
    read4_dataReadRot64  <= byteswap32(read4_dataReadData(31 downto 0)) & byteswap32(read4_dataReadData(63 downto 32));
    read4_dataReadRot32  <= byteswap32(read4_dataReadData(31 downto 0));
    
-   read4_Addr         <= writebackReadAddress         when (stall4 = '1') else executeMemAddress(31 downto 0);
+   read4_Addr         <= writebackReadAddress         when (stall4 = '1') else executeMemAddress;
    read4_oldData      <= writebackReadLastData        when (stall4 = '1') else executeMemReadLastData;
    read4_cop1_readEna <= writeback_COP1_ReadEnable    when (stall4 = '1') else executeCOP1ReadEnable;
    read4_cop1_target  <= cop1_stage4_target           when (stall4 = '1') else executeCOP1Target;
@@ -2904,7 +2917,7 @@ begin
                   elsif (executeMemReadEnable = '1') then
                   
                      writebackLoadType       <= executeLoadType;
-                     writebackReadAddress    <= executeMemAddress(31 downto 0);
+                     writebackReadAddress    <= executeMemAddress;
 
                   else
 
