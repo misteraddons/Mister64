@@ -589,6 +589,7 @@ begin
             if (stall = 0) then
                if (COP0_6_WIRED(5) = '0' and COP0_1_RANDOM(4 downto 0) = COP0_6_WIRED(4 downto 0)) then
                   COP0_1_RANDOM <= 6x"1F";
+                  --COP0_1_RANDOM <= 6x"03"; -- DO NOT COMMIT AS ACTIVE!
                else
                   COP0_1_RANDOM <= COP0_1_RANDOM - 1;
                end if;
@@ -758,15 +759,25 @@ begin
             if (stall = 0) then
                exception       <= '0';
                exceptionStage1 <= '0';
-               if (exceptionStage1 = '0') then
+               if (exceptionStage1 = '1') then
+                  COP0_14_EPC                  <= TLB_Instr_fetchAddrIn;
+                  COP0_13_CAUSE_branchDelay    <= '0';
+                  if (nextDelaySlot = '1') then
+                     COP0_14_EPC               <= TLB_Instr_fetchAddrIn - 4;
+                     COP0_13_CAUSE_branchDelay <= '1';
+                  end if;
+               else
                   nextEPC_1       <= nextEPC;
                   isDelaySlot_1   <= isDelaySlot;
                end if;
             end if;
             
             if (TLB_ExcInstrRead = '1') then
-               exceptionStage1 <= '1';
-               tlbMiss         <= TLB_ExcInstrMiss;
+               exceptionStage1                <= '1';
+               tlbMiss                        <= TLB_ExcInstrMiss;
+               COP0_12_SR_exceptionLevel      <= '1';
+               COP0_13_CAUSE_coprocessorError <= "00";
+               COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
             end if;
             
             if (exception = '0') then
@@ -774,20 +785,15 @@ begin
                
                   tlbMiss <= '0';
                
-                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or exception1 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or exceptionStage1 = '1') then
+                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or exception1 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
                   
                      exception <= '1';
-                     
                      COP0_12_SR_exceptionLevel   <= '1';
-                     
                      COP0_13_CAUSE_coprocessorError <= "00";
                      if (decode_irq = '1') then
                         COP0_13_CAUSE_exceptionCode    <= (others => '0');
                      elsif (exceptionFPU = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"F";
-                     elsif (exceptionStage1 = '1') then
-                        COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
-                        tlbMiss <= tlbMiss;
                      elsif (TLB_ExcDataRead = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
                         tlbMiss <= TLB_ExcDataMiss;
@@ -811,15 +817,10 @@ begin
             -- todo: also add other addr exceptions?
             if (TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or TLB_ExcInstrRead = '1') then
                excAddr := TLB_Data_fetchAddrIn;
-               
                if (TLB_ExcInstrRead = '1') then
-                  excAddr   := TLB_Instr_fetchAddrIn;
-                  nextEPC_1 <= TLB_Instr_fetchAddrIn;
-                  if (nextDelaySlot = '1') then
-                     nextEPC_1 <= TLB_Instr_fetchAddrIn - 4;
-                  end if;
+                  excAddr := TLB_Instr_fetchAddrIn;
                end if;
-               
+
                COP0_8_BADVIRTUALADDRESS       <= excAddr;
                
                COP0_10_ENTRYHI_virtualAddress <= excAddr(39 downto 13);

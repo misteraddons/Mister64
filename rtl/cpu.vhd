@@ -211,9 +211,6 @@ architecture arch of cpu is
    signal mem1_request                 : std_logic := '0';
    signal mem1_cacherequest            : std_logic := '0';
    signal mem1_address                 : unsigned(31 downto 0) := (others => '0'); 
-   
-   signal blockIRQNext                 : std_logic := '0';
-   signal blockIRQCntNext              : integer range 0 to 10;
             
    -- stage 2           
    --regs      
@@ -1106,6 +1103,7 @@ begin
                   if (exceptionStage1 = '1') then
                      stall1         <= '0';
                      opcode0        <= (others => '0');
+                     useCached_data <= '0';
                   else
                      mem1_address    <= TLB_instrAddrOutLookup;
                      useCached_data  <= TLB_instrUseCache;
@@ -2114,7 +2112,7 @@ begin
    
    -- use two nextaddress/branch paths with 2 tag rams, so different paths can be calculated in parallel to improve timing
    
-   FetchAddrSelect <= '0'  when (exception = '1' or executeIgnoreNext = '1' or decodeNew = '0') else
+   FetchAddrSelect <= '0'  when (exception = '1' or exceptionStage1 = '1' or executeIgnoreNext = '1' or decodeNew = '0') else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BGEZ and (cmpZero = '1' or cmpNegative = '0'))  else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BLTZ and cmpNegative = '1')                     else
                       '1'  when (decodeBranchType = BRANCH_BRANCH_BEQ  and cmpEqual = '1')                        else
@@ -2547,6 +2545,10 @@ begin
 
                      executeCacheEnable            <= decodeCacheEnable;
                      executeCacheCommand           <= decodeSource2;
+                     
+                     if (EXETLBMapped = '1' or DATACACHEON_intern = '0') then -- todo: allow datacache with TLB
+                        executeCacheEnable <= '0';
+                     end if;
                      
                      execute_TLBR                  <= decodeTLBR; 
                      execute_TLBWI                 <= decodeTLBWI;

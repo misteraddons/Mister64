@@ -83,7 +83,7 @@ begin
                when IDLE =>
                   if (TLB_ss_load = '1') then
                      TLB_fetchAddrIn  <= TLB_AddrIn(63 downto 40) & (TLB_AddrIn(39 downto 0) - 4);
-                  else
+                  elsif (TLB_Req = '1') then
                      TLB_fetchAddrIn  <= TLB_AddrIn;
                   end if;
                   if (TLB_Stall = '1') then
