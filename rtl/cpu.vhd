@@ -21,6 +21,7 @@ entity cpu is
       DATACACHEON           : in  std_logic;
       DATACACHESLOW         : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB     : in  std_logic;
+      RANDOMMISS            : in  unsigned(3 downto 0);
 
       irqRequest            : in  std_logic;
       cpuPaused             : in  std_logic;
@@ -135,7 +136,6 @@ architecture arch of cpu is
                      
    signal exception                    : std_logic;
    signal exceptionStage1              : std_logic;
-   signal exceptionNew1                : std_logic := '0';
    signal exceptionNew3                : std_logic := '0';
    signal exceptionFPU                 : std_logic;
    signal exception_COP                : unsigned(1 downto 0);
@@ -473,6 +473,7 @@ architecture arch of cpu is
    --wires
    signal EXEIgnoreNext                : std_logic := '0';
    signal EXEBranchdelaySlot           : std_logic := '0';
+   signal EXECOPBranchDelaySlot        : std_logic := '0';
    signal EXEBranchTaken               : std_logic := '0';
    signal EXEMemWriteData              : unsigned(63 downto 0) := (others => '0');
    signal EXEMemWriteMask              : std_logic_vector(7 downto 0) := (others => '0');
@@ -1028,8 +1029,6 @@ begin
                             
       SS_reset          => SS_reset
    );
-                     
-   exceptionNew1   <= '0';
    
    -- todo: only in kernelmode and only in 32bit mode
    -- todo: check both addresses and TLB type!
@@ -2130,6 +2129,10 @@ begin
                  PCnext;
 
    FetchAddr2 <= PCnextBranch;
+   
+   EXECOPBranchDelaySlot <= '0' when (executeIgnoreNext = '1') else
+                            '1' when (decodeBranchType /= BRANCH_OFF) else 
+                            '0';
 
    EXEBranchdelaySlot <= '0' when (executeIgnoreNext = '1') else
                          '1' when (decodeBranchType = BRANCH_ALWAYS_REG) else
@@ -3189,6 +3192,8 @@ begin
       stall4Masked            => stall4Masked,
       executeNew              => executeNew,
       reset                   => reset_93,
+      
+      RANDOMMISS              => RANDOMMISS,
             
       error_exception         => error_exception,
       error_TLB               => error_TLB,
@@ -3203,13 +3208,12 @@ begin
 
       eret                    => execute_ERET,
       exception3              => exceptionNew3,
-      exception1              => exceptionNew1,
       exceptionFPU            => exceptionFPU,
       exceptionCode_1         => "0000", -- todo
       exceptionCode_3         => exceptionCode_3,
       exception_COP           => exception_COP,
       isDelaySlot             => executeBranchdelaySlot,
-      nextDelaySlot           => EXEBranchdelaySlot,
+      nextDelaySlot           => EXECOPBranchDelaySlot,
       pcOld1                  => PCold1,
             
       eretPC                  => eretPC,

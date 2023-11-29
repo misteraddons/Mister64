@@ -129,6 +129,7 @@ begin
       DATACACHEON           => '1',
       DATACACHESLOW         => "0000",
       DATACACHEFORCEWEB     => '0',
+      RANDOMMISS            => x"0",
       DDR3SLOW              => "0000",
       DISABLEFILTER         => '0',
       DISABLEDITHER         => '0',

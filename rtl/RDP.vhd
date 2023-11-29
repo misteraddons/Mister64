@@ -204,6 +204,8 @@ architecture arch of RDP is
    signal poly_start                : std_logic;
    signal poly_loading_mode         : std_logic;
    signal poly_done                 : std_logic;
+   signal settings_KEYRGB           : tsettings_KEYRGB;
+   signal settings_Convert          : tsettings_Convert;
    signal settings_scissor          : tsettings_scissor;
    signal settings_Z                : tsettings_Z;
    signal settings_otherModes       : tsettings_otherModes;
@@ -838,6 +840,8 @@ begin
       tileSize_WrData         => tileSize_WrData,                    
       tileSize_we             => tileSize_we,                                        
                               
+      settings_KEYRGB         => settings_KEYRGB, 
+      settings_Convert        => settings_Convert,                            
       settings_scissor        => settings_scissor,   
       settings_Z              => settings_Z,   
       settings_otherModes     => settings_otherModes, 
@@ -1199,7 +1203,9 @@ begin
       settings_colorImage     => settings_colorImage,  
       settings_textureImage   => settings_textureImage,
       settings_tile           => settings_tile,        
-      settings_combineMode    => settings_combineMode,        
+      settings_combineMode    => settings_combineMode, 
+      settings_KEYRGB         => settings_KEYRGB, 
+      settings_Convert        => settings_Convert,       
                                                       
       pipeIn_trigger          => pipeIn_trigger,
       pipeIn_valid            => pipeIn_valid,  

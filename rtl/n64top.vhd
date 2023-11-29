@@ -42,6 +42,7 @@ entity n64top is
       DATACACHEON             : in  std_logic;
       DATACACHESLOW           : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB       : in  std_logic; 
+      RANDOMMISS              : in  unsigned(3 downto 0);
       DDR3SLOW                : in  std_logic_vector(3 downto 0);
       DISABLEFILTER           : in  std_logic;       
       DISABLEDITHER           : in  std_logic;       
@@ -1400,6 +1401,7 @@ begin
       DATACACHEON          => DATACACHEON,
       DATACACHESLOW        => DATACACHESLOW,
       DATACACHEFORCEWEB    => DATACACHEFORCEWEB,
+      RANDOMMISS           => RANDOMMISS,
             
       irqRequest           => irqRequest,
       cpuPaused            => '0',

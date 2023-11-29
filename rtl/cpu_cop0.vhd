@@ -15,6 +15,8 @@ entity cpu_cop0 is
       stall4Masked            : in  unsigned(4 downto 0);
       executeNew              : in  std_logic;
       reset                   : in  std_logic;
+      
+      RANDOMMISS              : in  unsigned(3 downto 0);
             
       error_exception         : out std_logic := '0';
       error_TLB               : out std_logic := '0';
@@ -29,7 +31,6 @@ entity cpu_cop0 is
                     
       eret                    : in  std_logic;
       exception3              : in  std_logic;
-      exception1              : in  std_logic;
       exceptionFPU            : in  std_logic;
       exceptionCode_1         : in  unsigned(3 downto 0);
       exceptionCode_3         : in  unsigned(3 downto 0);
@@ -163,7 +164,8 @@ architecture arch of cpu_cop0 is
    signal COP0_LATCH                      : unsigned(63 downto 0) := (others => '0');   
    
    signal bit64mode                       : std_logic := '0';
-   signal tlbMiss                         : std_logic := '0';
+   signal tlbMiss1                        : std_logic := '0';
+   signal tlbMiss3                        : std_logic := '0';
    
    signal nextEPC_1                       : unsigned(63 downto 0) := (others => '0');
    signal isDelaySlot_1                   : std_logic := '0';
@@ -271,6 +273,7 @@ architecture arch of cpu_cop0 is
    signal TLB_fetchExcDirty               : std_logic := '0';
    signal TLB_fetchExcNotFound            : std_logic := '0';
    signal TLB_fetchCached                 : std_logic := '0';
+   signal TLB_fetchRandom                 : std_logic := '0';
    signal TLB_fetchAddrOut                : unsigned(31 downto 0) := (others => '0');
    
 -- synthesis translate_off
@@ -444,7 +447,7 @@ begin
          
          if (COP0_12_SR_vectorLocation = '1') then
          
-            if (tlbMiss = '1' and COP0_12_SR_errorLevel = '0') then
+            if (COP0_12_SR_errorLevel = '0' and ((exception = '1' and tlbMiss3 = '1') or (exception = '0' and exceptionStage1 = '1' and tlbMiss1 = '1'))) then
                if (bit64mode = '1') then
                   exceptionPC(31 downto 0) <= x"BFC00280";
                else
@@ -456,7 +459,7 @@ begin
             
          else
             
-            if (tlbMiss = '1' and COP0_12_SR_errorLevel = '0') then
+            if (COP0_12_SR_errorLevel = '0' and ((exception = '1' and tlbMiss3 = '1') or (exception = '0' and exceptionStage1 = '1' and tlbMiss1 = '1'))) then
                if (bit64mode = '1') then
                   exceptionPC(31 downto 0) <= x"80000080";
                else
@@ -561,7 +564,8 @@ begin
             TLBDone                         <= '0';
             TLB_Instr_fetchReq_saved        <= '0';
             TLB_Data_fetchReq_saved         <= '0';
-            tlbMiss                         <= '0';
+            tlbMiss1                        <= '0';
+            tlbMiss3                        <= '0';
             
          elsif (ce = '1') then
          
@@ -759,33 +763,32 @@ begin
             if (stall = 0) then
                exception       <= '0';
                exceptionStage1 <= '0';
-               if (exceptionStage1 = '1') then
+               nextEPC_1       <= nextEPC;
+               isDelaySlot_1   <= isDelaySlot;
+               if (exception = '0' and exceptionStage1 = '1') then
+                  COP0_13_CAUSE_coprocessorError <= "00";
+                  COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
                   COP0_14_EPC                  <= TLB_Instr_fetchAddrIn;
                   COP0_13_CAUSE_branchDelay    <= '0';
                   if (nextDelaySlot = '1') then
                      COP0_14_EPC               <= TLB_Instr_fetchAddrIn - 4;
                      COP0_13_CAUSE_branchDelay <= '1';
                   end if;
-               else
-                  nextEPC_1       <= nextEPC;
-                  isDelaySlot_1   <= isDelaySlot;
                end if;
             end if;
             
             if (TLB_ExcInstrRead = '1') then
-               exceptionStage1                <= '1';
-               tlbMiss                        <= TLB_ExcInstrMiss;
-               COP0_12_SR_exceptionLevel      <= '1';
-               COP0_13_CAUSE_coprocessorError <= "00";
-               COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
+               exceptionStage1            <= '1';
+               tlbMiss1                   <= TLB_ExcInstrMiss;
+               COP0_12_SR_exceptionLevel  <= '1';
             end if;
             
             if (exception = '0') then
                if (stall = 0 or exceptionFPU = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
                
-                  tlbMiss <= '0';
+                  tlbMiss3 <= '0';
                
-                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or exception1 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
+                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
                   
                      exception <= '1';
                      COP0_12_SR_exceptionLevel   <= '1';
@@ -796,10 +799,10 @@ begin
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"F";
                      elsif (TLB_ExcDataRead = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
-                        tlbMiss <= TLB_ExcDataMiss;
+                        tlbMiss3 <= TLB_ExcDataMiss;
                      elsif (TLB_ExcDataWrite = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"3";
-                        tlbMiss <= TLB_ExcDataMiss;
+                        tlbMiss3 <= TLB_ExcDataMiss;
                      elsif (TLB_ExcDataDirty = '1') then
                         COP0_13_CAUSE_exceptionCode    <= '0' & x"1";
                      elsif (exception3 = '1') then
@@ -937,6 +940,11 @@ begin
                            TLB_fetchCached <= '1';
                            if (TLB_cache = 2) then
                               TLB_fetchCached <= '0';
+                           end if;
+                           
+                           TLB_fetchRandom <= '0';
+                           if (TLB_readAddr > 1) then
+                              TLB_fetchRandom <= '1';
                            end if;
                      
                            if (TLBState = TLBINSTR) then
@@ -1099,7 +1107,9 @@ begin
    (
       clk93                => clk93,    
       ce                   => ce,
-      reset                => reset,          
+      reset                => reset,   
+
+      RANDOMMISS           => RANDOMMISS,
                                        
       TLBInvalidate        => TLBInvalidate,          
                                        
@@ -1121,6 +1131,7 @@ begin
       TLB_fetchExcInvalid  => TLB_fetchExcInvalid,  
       TLB_fetchExcNotFound => TLB_fetchExcNotFound,
       TLB_fetchCached      => TLB_fetchCached,     
+      TLB_fetchRandom      => TLB_fetchRandom,     
       TLB_fetchAddrOut     => TLB_fetchAddrOut 
    );
    

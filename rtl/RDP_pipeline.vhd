@@ -30,6 +30,8 @@ entity RDP_pipeline is
       settings_textureImage   : in  tsettings_textureImage;
       settings_tile           : in  tsettings_tile;
       settings_combineMode    : in  tsettings_combineMode;
+      settings_KEYRGB         : in  tsettings_KEYRGB;
+      settings_Convert        : in  tsettings_Convert;
      
       pipeIn_trigger          : in  std_logic;
       pipeIn_valid            : in  std_logic;
@@ -1317,6 +1319,8 @@ begin
       settings_combineMode    => settings_combineMode,
       settings_primcolor      => settings_primcolor, 
       settings_envcolor       => settings_envcolor, 
+      settings_KEYRGB         => settings_KEYRGB, 
+      settings_Convert        => settings_Convert, 
       
       pipeInColor             => stage_Color(STAGE_PALETTE),
       texture_color           => texture_color,
