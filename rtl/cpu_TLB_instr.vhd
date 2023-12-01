@@ -68,7 +68,7 @@ begin
    TLB_AddrOutFound <= mini_physical(31 downto 12) & TLB_AddrIn(11 downto 0);
    TLB_useCache     <= mini_cached;
 
-   random_check     <= '1' when (mini_random = '1' and random_counter >= random_checkCnt) else '0';
+   random_check     <= '0'; --'1' when (mini_random = '1' and random_counter >= random_checkCnt) else '0';
 
    process (clk93)
    begin

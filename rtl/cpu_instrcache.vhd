@@ -22,16 +22,16 @@ entity cpu_instrcache is
       ddr3_DOUT_READY   : in  std_logic;
       
       read_select       : in  std_logic;
-      read_addr1        : in  unsigned(28 downto 0);
-      read_addr2        : in  unsigned(28 downto 0);
-      read_addrCompare1 : in  unsigned(28 downto 0);
-      read_addrCompare2 : in  unsigned(28 downto 0);
+      read_addr1        : in  unsigned(31 downto 0);
+      read_addr2        : in  unsigned(31 downto 0);
+      read_addrCompare1 : in  unsigned(31 downto 0);
+      read_addrCompare2 : in  unsigned(31 downto 0);
       read_hit          : out std_logic;
       read_data         : out std_logic_vector(31 downto 0) := (others => '0');
       
       fill_request      : in  std_logic;
-      fill_addrData     : in  unsigned(28 downto 0);
-      fill_addrTag      : in  unsigned(28 downto 0);
+      fill_addrData     : in  unsigned(31 downto 0);
+      fill_addrTag      : in  unsigned(31 downto 0);
       fill_done         : out std_logic := '0';
       
       CacheCommandEna   : in  std_logic;
@@ -49,12 +49,12 @@ architecture arch of cpu_instrcache is
 
    -- tags
    signal tag_address_a    : std_logic_vector(8 downto 0) := (others => '0');
-   signal tag_data_a       : std_logic_vector(17 downto 0) := (others => '0');
+   signal tag_data_a       : std_logic_vector(20 downto 0) := (others => '0');
    signal tag_wren_a       : std_logic := '0';
    signal tag_address_b1   : std_logic_vector(8 downto 0);
    signal tag_address_b2   : std_logic_vector(8 downto 0);
-   signal tag_q_b1         : std_logic_vector(17 downto 0);
-   signal tag_q_b2         : std_logic_vector(17 downto 0);
+   signal tag_q_b1         : std_logic_vector(20 downto 0);
+   signal tag_q_b2         : std_logic_vector(20 downto 0);
 
    signal read_hit1        : std_logic;
    signal read_hit2        : std_logic;
@@ -88,7 +88,7 @@ begin
    itagram1 : entity mem.RamMLAB
    generic map
    (
-      width      => 18, -- 17 bits(28..12) of address + 1 bit valid
+      width      => 21, -- 20 bits(31..12) of address + 1 bit valid
       widthad    => 9
    )
    port map
@@ -102,12 +102,12 @@ begin
    );
    
    tag_address_b1 <= std_logic_vector(read_addr1(13 downto 5));
-   read_hit1      <= '1' when (unsigned(tag_q_b1(16 downto 0)) = read_addrCompare1(28 downto 12) and tag_q_b1(17) = '1') else '0';
+   read_hit1      <= '1' when (unsigned(tag_q_b1(19 downto 0)) = read_addrCompare1(31 downto 12) and tag_q_b1(20) = '1') else '0';
    
    itagram2 : entity mem.RamMLAB
    generic map
    (
-      width      => 18, -- 17 bits(28..12) of address + 1 bit valid
+      width      => 21, -- 20 bits(31..12) of address + 1 bit valid
       widthad    => 9
    )
    port map
@@ -121,7 +121,7 @@ begin
    );
    
    tag_address_b2 <= std_logic_vector(read_addr2(13 downto 5));
-   read_hit2      <= '1' when (unsigned(tag_q_b2(16 downto 0)) = read_addrCompare2(28 downto 12) and tag_q_b2(17) = '1') else '0';
+   read_hit2      <= '1' when (unsigned(tag_q_b2(19 downto 0)) = read_addrCompare2(31 downto 12) and tag_q_b2(20) = '1') else '0';
 
    --------- data
    
@@ -207,7 +207,7 @@ begin
                      tag_address_a  <= std_logic_vector(CacheCommandAddr(13 downto 5));
                   elsif (CacheCommandEna = '1' and CacheCommand = 5x"08") then
                      tag_wren_a     <= '1';
-                     tag_data_a     <= TagLo_Valid & std_logic_vector(TagLo_Addr(16 downto 0));
+                     tag_data_a     <= TagLo_Valid & std_logic_vector(TagLo_Addr(19 downto 0));
                      tag_address_a  <= std_logic_vector(CacheCommandAddr(13 downto 5));
                   elsif (fill_request = '1' or fill_latched = '1') then
                      state          <= FILL;
@@ -227,7 +227,7 @@ begin
                   if (ram_done = '1') then
                      state          <= IDLE;
                      tag_wren_a     <= '1';
-                     tag_data_a     <= '1' & std_logic_vector(fill_addrData(28 downto 12));
+                     tag_data_a     <= '1' & std_logic_vector(fill_addrData(31 downto 12));
                      tag_address_a  <= std_logic_vector(fill_addrTag(13 downto 5));
                      fill_done      <= '1'; 
                   end if;

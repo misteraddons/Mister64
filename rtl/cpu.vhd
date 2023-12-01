@@ -193,7 +193,7 @@ architecture arch of cpu is
    signal fetchCache                   : std_logic;
    signal useCached_data               : std_logic := '0';
    
-   signal fill_addrTag                 : unsigned(28 downto 0) := (others => '0'); 
+   signal fill_addrTag                 : unsigned(31 downto 0) := (others => '0'); 
    signal instrcache_request           : std_logic;
    signal instrcache_active            : std_logic := '0';
    signal instrcache_hit               : std_logic;
@@ -1008,15 +1008,15 @@ begin
       ddr3_DOUT_READY   => ddr3_DOUT_READY,
       
       read_select       => FetchAddrSelect,
-      read_addr1        => FetchAddr1(28 downto 0),
-      read_addr2        => FetchAddr2(28 downto 0),
-      read_addrCompare1 => FetchAddrTLBMuxed1(28 downto 0),
-      read_addrCompare2 => FetchAddrTLBMuxed2(28 downto 0),
+      read_addr1        => FetchAddr1(31 downto 0),
+      read_addr2        => FetchAddr2(31 downto 0),
+      read_addrCompare1 => FetchAddrTLBMuxed1,
+      read_addrCompare2 => FetchAddrTLBMuxed2,
       read_hit          => instrcache_hit,
       read_data         => instrcache_data,
       
       fill_request      => instrcache_fill,
-      fill_addrData     => mem1_address(28 downto 0),
+      fill_addrData     => mem1_address(31 downto 0),
       fill_addrTag      => fill_addrTag,
       fill_done         => instrcache_fill_done,
       
@@ -1063,11 +1063,11 @@ begin
             TLB_ss_load    <= TLB_instrMapped;
             if (ss_in(16)(3) = '1') then
                mem1_address   <= unsigned(ss_in(5)(31 downto 0)); -- last was branch -> should be patched in the savestate already
-               fill_addrTag   <= unsigned(ss_in(5)(28 downto 0));
+               fill_addrTag   <= unsigned(ss_in(5)(31 downto 0));
                PC             <= unsigned(ss_in(5)); 
             else
                mem1_address   <= unsigned(ss_in(0)(31 downto 0)); -- x"FFFFFFFFBFC00000";    
-               fill_addrTag   <= unsigned(ss_in(0)(28 downto 0));
+               fill_addrTag   <= unsigned(ss_in(0)(31 downto 0));
                PC             <= unsigned(ss_in(0)); -- x"FFFFFFFFBFC00000";                    
             end if;
             stall1         <= '1';
@@ -1123,10 +1123,10 @@ begin
                
                if (TLB_instrMapped = '1') then
                   mem1_address <= TLB_instrAddrOutFound;
-                  fill_addrTag <= FetchAddr(28 downto 0);
+                  fill_addrTag <= FetchAddr(31 downto 0);
                else
                   mem1_address <= FetchAddr(31 downto 0);
-                  fill_addrTag <= FetchAddr(28 downto 0);
+                  fill_addrTag <= FetchAddr(31 downto 0);
                end if;
       
                if (TLB_instrStall = '1') then
@@ -2213,7 +2213,7 @@ begin
    FPU_command_ena      <= decodeFPUCommandEnable  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
    FPU_TransferEna      <= decodeFPUTransferEnable when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
                      
-   EXECOP0WriteValue    <= 39x"0" & calcMemAddr(28 downto 4)                 when (decodeSetLL = '1') else -- todo: should be modified by TLB and region check
+   EXECOP0WriteValue    <= 36x"0" & calcMemAddr(31 downto 4)                 when (decodeSetLL = '1') else
                            unsigned(resize(signed(value2(31 downto 0)), 64)) when (decodeCOP64 = '0') else
                            value2;
 
@@ -2227,8 +2227,7 @@ begin
 
    ---------------------- load/store ------------------
    
-   EXECacheAddr(31 downto 3) <= calcMemAddr(31 downto 3) when (EXETLBMapped = '1') else 
-                                "000" & calcMemAddr(28 downto 3);
+   EXECacheAddr(31 downto 3) <= calcMemAddr(31 downto 3);
                                 
    EXECacheAddr(2 downto 0)  <= "000"                  when (decodeLoadType = LOADTYPE_LEFT64 or decodeLoadType = LOADTYPE_RIGHT64) else 
                                 calcMemAddr(2) & "00"  when (decodeLoadType = LOADTYPE_LEFT or decodeLoadType = LOADTYPE_RIGHT) else 
@@ -2453,7 +2452,7 @@ begin
                if (EXETLBDataAccess = '1') then
                   executeMemAddress <= TLB_dataAddrOut;
                else
-                  executeMemAddress <= "000" & calcMemAddr(28 downto 0);
+                  executeMemAddress <= calcMemAddr(31 downto 0);
                end if;
                
                executeCOP0WriteValue   <= EXECOP0WriteValue; 
@@ -2711,7 +2710,7 @@ begin
       ram_active        => datacache_active,
       ram_grant         => rdram_granted2X,
       ram_done          => mem_finished_read,
-      ram_addr          => mem_address(28 downto 0),
+      ram_addr          => mem_address,
       ddr3_DOUT         => ddr3_DOUT,      
       ddr3_DOUT_READY   => ddr3_DOUT_READY,
       

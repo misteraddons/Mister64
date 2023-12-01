@@ -727,7 +727,7 @@ begin
                end if; -- write enable
 
                -- eret
-               if (eret = '1') then
+               if (eret = '1' and exception = '0' and exceptionStage1 = '0') then
                   if (COP0_12_SR_errorLevel = '1') then
                      COP0_12_SR_errorLevel <= '0';
                   else

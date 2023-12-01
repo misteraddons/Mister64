@@ -25,7 +25,7 @@ entity cpu_datacache is
       ram_active        : in  std_logic := '0';
       ram_grant         : in  std_logic := '0';
       ram_done          : in  std_logic := '0';
-      ram_addr          : in  unsigned(28 downto 0);
+      ram_addr          : in  unsigned(31 downto 0);
       ddr3_DOUT         : in  std_logic_vector(63 downto 0);
       ddr3_DOUT_READY   : in  std_logic;
       
