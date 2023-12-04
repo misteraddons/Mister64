@@ -17,6 +17,8 @@ entity cpu_cop0 is
       reset                   : in  std_logic;
       
       RANDOMMISS              : in  unsigned(3 downto 0);
+      DISABLE_BOOTCOUNT       : in  std_logic;
+      DISABLE_DTLBMINI        : in  std_logic;
             
       error_exception         : out std_logic := '0';
       error_TLB               : out std_logic := '0';
@@ -83,9 +85,11 @@ entity cpu_cop0 is
       TLB_dataUseCache        : out std_logic;
       TLB_dataStall           : out std_logic;
       TLB_dataUnStall         : out std_logic;
-      TLB_dataAddrOut         : out unsigned(31 downto 0);
+      TLB_dataAddrOutFound    : out unsigned(31 downto 0);
+      TLB_dataAddrOutLookup   : out unsigned(31 downto 0);
             
       SS_reset                : in  std_logic;
+      loading_savestate       : in  std_logic;
       SS_DataWrite            : in  std_logic_vector(63 downto 0);
       SS_Adr                  : in  unsigned(11 downto 0);
       SS_wren_CPU             : in  std_logic;
@@ -172,6 +176,8 @@ architecture arch of cpu_cop0 is
    
    signal cop0Written6                    : integer range 0 to 2 := 0;
    signal cop0Written9                    : integer range 0 to 3 := 0;
+   signal cop0FirstWrite9                 : std_logic := '0';
+   signal DISABLE_BOOTCOUNT_INTERN        : std_logic := '0';
    
    --signal irq_offCount                    : unsigned(13 downto 0);
    
@@ -191,6 +197,7 @@ architecture arch of cpu_cop0 is
    signal TLB_resetAddr                   : unsigned(4 downto 0) := (others => '0');
    
    signal TLB_readAddr                    : unsigned(4 downto 0) := (others => '0');
+   signal TLB_compareEnd                  : unsigned(4 downto 0) := (others => '0');
    
    signal TLBInvalidate                   : std_logic := '0'; 
    
@@ -273,7 +280,9 @@ architecture arch of cpu_cop0 is
    signal TLB_fetchExcDirty               : std_logic := '0';
    signal TLB_fetchExcNotFound            : std_logic := '0';
    signal TLB_fetchCached                 : std_logic := '0';
+   signal TLB_fetchDirty                  : std_logic := '0';
    signal TLB_fetchRandom                 : std_logic := '0';
+   signal TLB_fetchSource                 : unsigned(4 downto 0) := (others => '0');
    signal TLB_fetchAddrOut                : unsigned(31 downto 0) := (others => '0');
    
 -- synthesis translate_off
@@ -439,6 +448,8 @@ begin
          TLB_Data_fetchDone  <= '0';
          TLBInvalidate       <= '0';
       
+         DISABLE_BOOTCOUNT_INTERN <= DISABLE_BOOTCOUNT;
+      
          if (COP0_12_SR_errorLevel = '1') then
             eretPC <= COP0_30_EPCERROR;
          else
@@ -557,6 +568,7 @@ begin
             
             cop0Written6                    <= 0;
             cop0Written9                    <= 0;
+            cop0FirstWrite9                 <= (not loading_savestate) and (not DISABLE_BOOTCOUNT_INTERN);
             
             irqTrigger                      <= '0';
             
@@ -657,14 +669,18 @@ begin
                            cop0Written6    <= 2;
                         
                         when 9 => 
-                           COP0_9_COUNT <= writeValue(31 downto 0) & '0';
-                           cop0Written9 <= 3;
+                           COP0_9_COUNT    <= writeValue(31 downto 0) & '0';
+                           cop0Written9    <= 3;
+                           cop0FirstWrite9 <= '0';
+                           if (cop0FirstWrite9 = '1') then -- compensate for RDRAM calibration wait time, e.g. battletanx or waverace shindue
+                              COP0_9_COUNT(24 downto 21) <= x"F";
+                           end if;
                         
                         when 10 =>
                            COP0_10_ENTRYHI_addressSpaceID <= writeValue(7 downto 0);
                            COP0_10_ENTRYHI_virtualAddress <= writeValue(39 downto 13);
                            COP0_10_ENTRYHI_region         <= writeValue(63 downto 62);
-                           if (COP0_10_ENTRYHI_region /= writeValue(63 downto 62)) then
+                           if (COP0_10_ENTRYHI_addressSpaceID /= writeValue(7 downto 0)) then
                               TLBInvalidate <= '1';
                            end if;
                            
@@ -877,18 +893,22 @@ begin
                      
                   elsif (TLB_Instr_fetchReq_saved = '1' or TLB_Instr_fetchReq = '1') then
                      TLB_Instr_fetchReq_saved <= '0';
+                     TLB_readAddr             <= TLB_fetchSource;
+                     TLB_compareEnd           <= TLB_fetchSource - 1;
                      TLBState                 <= TLBINSTR;
                      TLB_fetchAddrIn          <= TLB_Instr_fetchAddrIn;
                      TLB_fetchExcNotFound     <= '1';
                      TLB_fetchExcInvalid      <= '0';                
                      
                   elsif (TLB_Data_fetchReq_saved = '1' or TLB_Data_fetchReq = '1') then
-                     TLB_Data_fetchReq_saved <= '0';
-                     TLBState                <= TLBDATA;
-                     TLB_fetchAddrIn         <= TLB_Data_fetchAddrIn;
-                     TLB_fetchExcNotFound    <= '1';
-                     TLB_fetchExcInvalid     <= '0';
-                     TLB_fetchExcDirty       <= '0';
+                     TLB_Data_fetchReq_saved  <= '0';
+                     TLB_readAddr             <= TLB_fetchSource;
+                     TLB_compareEnd           <= TLB_fetchSource - 1;
+                     TLBState                 <= TLBDATA;
+                     TLB_fetchAddrIn          <= TLB_Data_fetchAddrIn;
+                     TLB_fetchExcNotFound     <= '1';
+                     TLB_fetchExcInvalid      <= '0';
+                     TLB_fetchExcDirty        <= '0';
                      
                   end if;
                   
@@ -913,7 +933,7 @@ begin
                   
                when TLBDATA | TLBINSTR =>
                   TLB_readAddr <= TLB_readAddr + 1;
-                  if (TLB_readAddr = 31) then
+                  if (TLB_readAddr = TLB_compareEnd) then
                      TLBState           <= TLBIDLE;
                      if (TLBState = TLBINSTR) then
                         TLB_Instr_fetchDone <= '1';
@@ -942,6 +962,8 @@ begin
                               TLB_fetchCached <= '0';
                            end if;
                            
+                           TLB_fetchDirty <= TLB_dirty;
+                           
                            TLB_fetchRandom <= '0';
                            if (TLB_readAddr > 1) then
                               TLB_fetchRandom <= '1';
@@ -952,6 +974,8 @@ begin
                            else
                               TLB_Data_fetchDone <= '1';
                            end if;
+                           
+                           TLB_fetchSource <= TLB_readAddr;
                      
                         end if;
                      end if;
@@ -1139,7 +1163,9 @@ begin
    port map
    (
       clk93                => clk93,          
-      reset                => reset,          
+      reset                => reset,    
+
+      DISABLE_DTLBMINI     => DISABLE_DTLBMINI,
                                        
       TLBInvalidate        => TLBInvalidate,                 
                                        
@@ -1149,7 +1175,8 @@ begin
       TLB_useCache         => TLB_dataUseCache, 
       TLB_Stall            => TLB_dataStall,  
       TLB_UnStall          => TLB_dataUnStall,
-      TLB_AddrOut          => TLB_dataAddrOut,
+      TLB_AddrOutFound     => TLB_dataAddrOutFound,
+      TLB_AddrOutLookup    => TLB_dataAddrOutLookup,
       
       TLB_ExcRead          => TLB_ExcDataRead, 
       TLB_ExcWrite         => TLB_ExcDataWrite,
@@ -1163,6 +1190,8 @@ begin
       TLB_fetchExcDirty    => TLB_fetchExcDirty,   
       TLB_fetchExcNotFound => TLB_fetchExcNotFound,
       TLB_fetchCached      => TLB_fetchCached,     
+      TLB_fetchDirty       => TLB_fetchDirty,     
+      TLB_fetchSource      => TLB_fetchSource, 
       TLB_fetchAddrOut     => TLB_fetchAddrOut 
    );
    

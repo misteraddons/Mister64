@@ -43,6 +43,8 @@ entity n64top is
       DATACACHESLOW           : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB       : in  std_logic; 
       RANDOMMISS              : in  unsigned(3 downto 0);
+      DISABLE_BOOTCOUNT       : in  std_logic;
+      DISABLE_DTLBMINI        : in  std_logic;
       DDR3SLOW                : in  std_logic_vector(3 downto 0);
       DISABLEFILTER           : in  std_logic;       
       DISABLEDITHER           : in  std_logic;       
@@ -1402,6 +1404,8 @@ begin
       DATACACHESLOW        => DATACACHESLOW,
       DATACACHEFORCEWEB    => DATACACHEFORCEWEB,
       RANDOMMISS           => RANDOMMISS,
+      DISABLE_BOOTCOUNT    => DISABLE_BOOTCOUNT,
+      DISABLE_DTLBMINI     => DISABLE_DTLBMINI, 
             
       irqRequest           => irqRequest,
       cpuPaused            => '0',
@@ -1437,6 +1441,7 @@ begin
 -- synthesis translate_on
 
       SS_reset             => SS_reset,
+      loading_savestate    => loading_savestate,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(11 downto 0),   
       SS_wren_CPU          => SS_wren(10),     

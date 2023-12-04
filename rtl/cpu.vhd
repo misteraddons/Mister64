@@ -22,6 +22,8 @@ entity cpu is
       DATACACHESLOW         : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB     : in  std_logic;
       RANDOMMISS            : in  unsigned(3 downto 0);
+      DISABLE_BOOTCOUNT     : in  std_logic;
+      DISABLE_DTLBMINI      : in  std_logic;
 
       irqRequest            : in  std_logic;
       cpuPaused             : in  std_logic;
@@ -57,6 +59,7 @@ entity cpu is
 -- synthesis translate_on
       
       SS_reset              : in  std_logic;
+      loading_savestate     : in  std_logic;
       SS_DataWrite          : in  std_logic_vector(63 downto 0);
       SS_Adr                : in  unsigned(11 downto 0);
       SS_wren_CPU           : in  std_logic;
@@ -533,7 +536,8 @@ architecture arch of cpu is
    signal TLB_dataUseCache             : std_logic;
    signal TLB_dataStall                : std_logic;
    signal TLB_dataUnStall              : std_logic;
-   signal TLB_dataAddrOut              : unsigned(31 downto 0);
+   signal TLB_dataAddrOutFound         : unsigned(31 downto 0);
+   signal TLB_dataAddrOutLookup        : unsigned(31 downto 0);
    
    signal TagLo_Valid                  : std_logic;
    signal TagLo_Dirty                  : std_logic;
@@ -2423,7 +2427,7 @@ begin
             
             -- TLB unstall            
             if (TLB_dataUnStall = '1') then
-               executeMemAddress   <= TLB_dataAddrOut;
+               executeMemAddress   <= TLB_dataAddrOutLookup;
                executeNew          <= '1';
                if (exception = '0') then
                   executeStallFromMEM <= '1';
@@ -2450,7 +2454,7 @@ begin
                executeMemReadLastData  <= value2;           
 
                if (EXETLBDataAccess = '1') then
-                  executeMemAddress <= TLB_dataAddrOut;
+                  executeMemAddress <= TLB_dataAddrOutFound;
                else
                   executeMemAddress <= calcMemAddr(31 downto 0);
                end if;
@@ -2733,7 +2737,6 @@ begin
       
       CacheCommandEna   => cache_commandEnable,
       CacheCommand      => executeCacheCommand,
-      CacheCommandAddr  => executeMemAddress,
       CachecommandStall => datacache_CmdStall,
       CachecommandDone  => datacache_CmdDone,    
       
@@ -3193,6 +3196,8 @@ begin
       reset                   => reset_93,
       
       RANDOMMISS              => RANDOMMISS,
+      DISABLE_BOOTCOUNT       => DISABLE_BOOTCOUNT,
+      DISABLE_DTLBMINI        => DISABLE_DTLBMINI, 
             
       error_exception         => error_exception,
       error_TLB               => error_TLB,
@@ -3259,9 +3264,11 @@ begin
       TLB_dataUseCache        => TLB_dataUseCache,
       TLB_dataStall           => TLB_dataStall,
       TLB_dataUnStall         => TLB_dataUnStall,
-      TLB_dataAddrOut         => TLB_dataAddrOut,
+      TLB_dataAddrOutFound    => TLB_dataAddrOutFound,
+      TLB_dataAddrOutLookup   => TLB_dataAddrOutLookup,
             
       SS_reset                => SS_reset,    
+      loading_savestate       => loading_savestate,    
       SS_DataWrite            => SS_DataWrite,
       SS_Adr                  => SS_Adr,      
       SS_wren_CPU             => SS_wren_CPU, 

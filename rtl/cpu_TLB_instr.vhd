@@ -160,4 +160,43 @@ begin
       end if;
    end process;
    
+   -- synthesis translate_off
+   ganalyze : if 1 = 1 generate
+      signal cycles        : integer := 0;
+      signal stall_cycles  : integer := 0;
+      signal stall_count   : integer := 0;
+      signal request_count : integer := 0;
+   begin
+   
+      process
+      begin
+         wait until rising_edge(clk93);
+         
+         cycles <= cycles + 1;
+         
+         if (state /= IDLE or TLB_UnStall = '1') then
+            stall_cycles <= stall_cycles + 1;
+         end if;
+         
+         if (state = IDLE and TLB_Req = '1') then
+            request_count <= request_count + 1;
+         end if;         
+         
+         if (state = IDLE and TLB_Stall = '1') then
+            stall_count <= stall_count + 1;
+         end if;
+         
+         if (reset = '1') then
+            cycles        <= 0;
+            stall_cycles  <= 0;
+            stall_count   <= 0;
+            request_count <= 0;
+         end if;
+         
+      end process;
+   
+   end generate ganalyze;
+
+   -- synthesis translate_on   
+   
 end architecture;

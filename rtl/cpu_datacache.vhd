@@ -48,7 +48,6 @@ entity cpu_datacache is
       
       CacheCommandEna   : in  std_logic;
       CacheCommand      : in  unsigned(4 downto 0);
-      CacheCommandAddr  : in  unsigned(31 downto 0);
       CachecommandStall : out std_logic;
       CachecommandDone  : out std_logic := '0';
       
@@ -77,6 +76,8 @@ architecture arch of cpu_datacache is
    signal read_hit         : std_logic;
    
    signal tag_addr_1       : unsigned(31 downto 0) := (others => '0');
+   signal tag_addr_low     : unsigned(3 downto 0) := (others => '0');
+   signal tag_read_addr    : unsigned(12 downto 0) := (others => '0');
    signal fillAddr         : unsigned(31 downto 0) := (others => '0');
 
    -- data
@@ -124,7 +125,7 @@ architecture arch of cpu_datacache is
    signal isWB             : std_logic := '0';
    
    signal tag_wren_cmd     : std_logic := '0';
-   signal tag_data_addr    : std_logic_vector(8 downto 0) := (others => '0');
+   signal tag_addr_cmd     : std_logic_vector(8 downto 0) := (others => '0');
    signal tag_data_cmd     : std_logic_vector(21 downto 0) := (others => '0');
    
    -- slow
@@ -143,19 +144,13 @@ begin
    
    tag_wren_a     <= '1' when (tag_wren_cmd = '1') else
                      '1' when (state = IDLE and write_ena = '1' and read_hit = '1') else
-                     '1' when (state = CLEARCACHE) else
-                     '1' when (state = FILL) else
                      '0';
                      
-   tag_address_a  <= tag_data_addr                          when (tag_wren_cmd = '1') else
-                     clearAddr                              when (state = CLEARCACHE) else
-                     std_logic_vector(RW_addr(12 downto 4)) when (state = IDLE) else
-                     std_logic_vector(ram_reqAddr(12 downto 4)); -- fill
+   tag_address_a  <= tag_addr_cmd when (tag_wren_cmd = '1') else
+                     std_logic_vector(tag_addr_1(12 downto 4));
                      
-   tag_data_a     <= tag_data_cmd                          when (tag_wren_cmd = '1') else
-                     '1' & tag_q_b(20 downto 0)            when (state = IDLE) else
-                     22x"0"                                when (state = CLEARCACHE) else
-                     writeMode & '1' & std_logic_vector(ram_reqAddr(31 downto 12)); -- Fill
+   tag_data_a     <= tag_data_cmd when (tag_wren_cmd = '1') else
+                     '1' & tag_q_b(20 downto 0);
    
    
    --itagram : entity mem.dpram
@@ -196,9 +191,9 @@ begin
       q          => tag_q_b
    );
    
-   tag_address_b <= std_logic_vector(RW_addr(12 downto 4));
+   tag_address_b <= std_logic_vector(tag_addr_1(12 downto 4));
    
-   read_hit      <= '1' when (unsigned(tag_q_b(19 downto 0)) = tag_addr_1(31 downto 12) and tag_q_b(20) = '1') else '0';
+   read_hit      <= '1' when (unsigned(tag_q_b(19 downto 0)) = RW_addr(31 downto 12) and tag_q_b(20) = '1') else '0';
   
    --------- data
    
@@ -247,7 +242,7 @@ begin
       );
    end generate;
    
-   cache_address_b <= std_logic_vector(ram_reqAddr(12 downto 3)) when (state /= IDLE) else 
+   cache_address_b <= std_logic_vector(tag_read_addr(12 downto 3)) when (state /= IDLE) else 
                       std_logic_vector(tag_addr_1(12 downto 3)) when (ce_fetch = '0' or write_ena = '1') else 
                       std_logic_vector(tag_addr(12 downto 3));
                
@@ -271,14 +266,14 @@ begin
                       '1' when (writeMode = '0' and state = FILL and ram_done = '1') else 
                       '0';
    
-   read_data       <= cache_q_b                        when (tag_addr_1(2 downto 0) = "000") else
-                      8x"0"  & cache_q_b(63 downto  8) when (tag_addr_1(2 downto 0) = "001") else
-                      16x"0" & cache_q_b(63 downto 16) when (tag_addr_1(2 downto 0) = "010") else
-                      24x"0" & cache_q_b(63 downto 24) when (tag_addr_1(2 downto 0) = "011") else
-                      32x"0" & cache_q_b(63 downto 32) when (tag_addr_1(2 downto 0) = "100") else
-                      40x"0" & cache_q_b(63 downto 40) when (tag_addr_1(2 downto 0) = "101") else
-                      48x"0" & cache_q_b(63 downto 48) when (tag_addr_1(2 downto 0) = "110") else
-                      56x"0" & cache_q_b(63 downto 56); -- when (tag_addr_1(2 downto 0) = "111")
+   read_data       <= cache_q_b                        when (RW_addr(2 downto 0) = "000") else
+                      8x"0"  & cache_q_b(63 downto  8) when (RW_addr(2 downto 0) = "001") else
+                      16x"0" & cache_q_b(63 downto 16) when (RW_addr(2 downto 0) = "010") else
+                      24x"0" & cache_q_b(63 downto 24) when (RW_addr(2 downto 0) = "011") else
+                      32x"0" & cache_q_b(63 downto 32) when (RW_addr(2 downto 0) = "100") else
+                      40x"0" & cache_q_b(63 downto 40) when (RW_addr(2 downto 0) = "101") else
+                      48x"0" & cache_q_b(63 downto 48) when (RW_addr(2 downto 0) = "110") else
+                      56x"0" & cache_q_b(63 downto 56); -- when (RW_addr(2 downto 0) = "111")
    
    CachecommandStall <= '1' when (CacheCommandEna = '1' and CacheCommand = 5x"01") else
                         '1' when (CacheCommandEna = '1' and CacheCommand = 5x"05") else
@@ -324,22 +319,27 @@ begin
             case(state) is
             
                when IDLE =>
-                  writeMode    <= write_ena;
-                  write_be_1   <= write_be_rot; 
-                  write_data_1 <= write_data_rot;
-                  fillNext     <= '0';
-                  write_ena_1  <= write_ena;
-                  fillAddr     <= RW_addr(31 downto 0);
-                  isCommand    <= '0'; 
-                  isWB         <= '0'; 
+                  writeMode      <= write_ena;
+                  write_be_1     <= write_be_rot; 
+                  write_data_1   <= write_data_rot;
+                  fillNext       <= '0';
+                  write_ena_1    <= write_ena;
+                  fillAddr       <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
+                  tag_addr_low   <= tag_addr_1(3 downto 0);
+                  tag_read_addr  <= tag_addr_1(12 downto 0);
+                  isCommand      <= '0'; 
+                  isWB           <= '0'; 
+                  ram_reqAddr    <= RW_addr(31 downto 0); 
+                  tag_data_cmd   <= write_ena & '1' & std_logic_vector(RW_addr(31 downto 12)); -- default for fill
+                  tag_addr_cmd   <= std_logic_vector(tag_addr_1(12 downto 4)); 
+                  writeback_addr <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
+                  
                   if ((read_ena = '1' or write_ena = '1') and read_hit = '0') then
                      if (tag_q_b(21) = '1') then
                         state          <= WRITEBACK1ADDR; 
-                        ram_reqAddr    <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
-                        writeback_addr <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
+                        tag_read_addr(3 downto 0) <= "0000";
                         fillNext       <= '1';
                      else
-                        ram_reqAddr    <= RW_addr(31 downto 0); 
                         state          <= FILL;
                         ram_request    <= '1';
                         if (write_ena = '1' and force_wb = '1') then
@@ -350,13 +350,11 @@ begin
                   elsif (write_ena = '1' and read_hit = '1' and force_wb = '1') then
                      state          <= WRITEBACK1ADDR; 
                      isWB           <= '1';
-                     ram_reqAddr    <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
-                     writeback_addr <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
+                     tag_read_addr(3 downto 0) <= "0000";
                      
                   elsif (read_ena = '1' and slow_on = '1') then
                      state       <= WAITSLOW;
                      slowcnt     <= slow - 1;
-                     ram_reqAddr <= RW_addr(31 downto 0);
                      
                   elsif (write_ena_1 = '1' and read_ena = '1' and read_hit = '1') then
                      state <= READWAIT;
@@ -364,10 +362,7 @@ begin
                   elsif (CacheCommandEna = '1') then
                      state          <= COMMANDPROCESS;
                      isCommand      <= '1';
-                     ram_reqAddr    <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
-                     writeback_addr <= unsigned(tag_q_b(19 downto 0)) & RW_addr(11 downto 4) & "0000";
-                     tag_data_addr  <= std_logic_vector(RW_addr(12 downto 4));
-                     
+                     tag_read_addr(3 downto 0) <= "0000";
                      writeTagValue  <= tag_q_b(20) & tag_q_b(21) & unsigned(tag_q_b(19 downto 0)); -- valid & dirty & 20 bit address
                   
                      case (CacheCommand) is
@@ -387,11 +382,11 @@ begin
                            tag_data_cmd    <= TagLo_Dirty & TagLo_Valid & std_logic_vector(TagLo_Addr);
                            
                         when 5x"0D" => -- dcache create dirty exclusive
-                           if (tag_q_b(21) = '1' and (tag_q_b(20) = '0' or unsigned(tag_q_b(19 downto 0)) /= tag_addr_1(31 downto 12))) then
+                           if (tag_q_b(21) = '1' and (tag_q_b(20) = '0' or unsigned(tag_q_b(19 downto 0)) /= RW_addr(31 downto 12))) then
                               state          <= WRITEBACK1ADDR; 
                            end if;
                            tag_wren_cmd    <= '1';
-                           tag_data_cmd    <= "11" & std_logic_vector(tag_addr_1(31 downto 12));
+                           tag_data_cmd    <= "11" & std_logic_vector(RW_addr(31 downto 12));
                         
                         when 5x"11" => -- dcache hit invalidate
                            if (read_hit = '1') then
@@ -421,6 +416,9 @@ begin
                   end if;
 
                when CLEARCACHE =>
+                  tag_wren_cmd <= '1';
+                  tag_addr_cmd <= clearAddr; 
+                  tag_data_cmd <= (others => '0');
                   if (clearAddr /= 9x"1FF") then
                      clearAddr <= std_logic_vector(unsigned(clearAddr) + 1);
                   else
@@ -428,11 +426,13 @@ begin
                   end if;
                   
                when FILL =>
+                  if (ram_request = '1') then
+                     tag_wren_cmd   <= '1';
+                  end if;
                   if (ram_done = '1') then
                      state          <= IDLE;
                      if (isWB = '1') then
                         state          <= WRITEBACK1ADDR; 
-                        ram_reqAddr    <= fillAddr(31 downto 4) & "0000";
                         writeback_addr <= fillAddr(31 downto 4) & "0000";
                      end if;
                   end if;
@@ -451,8 +451,8 @@ begin
                   end if;
                
                when WRITEBACK1READ =>
-                  state          <= WRITEBACK1WRITE;
-                  ram_reqAddr(3) <= '1';
+                  state            <= WRITEBACK1WRITE;
+                  tag_read_addr(3) <= '1';
                
                when WRITEBACK1WRITE =>
                   state          <= WRITEBACK2WRITE;
@@ -466,12 +466,12 @@ begin
                   writeback_addr(3) <= '1';
                
                when WRITEBACKDONE =>
+                  tag_read_addr(3 downto 0) <= tag_addr_low;
                   if (fifo_block = '0') then
                      fillNext <= '0';
                      if (fillNext = '1') then
                         state       <= FILL;
                         ram_request <= '1';
-                        ram_reqAddr <= fillAddr;
                         if (writeMode = '1' and force_wb = '1') then
                            isWB <= '1';
                         end if;
@@ -516,6 +516,7 @@ begin
          variable export_AddrSave   : unsigned(31 downto 0);
          variable export_TagSave    : unsigned(21 downto 0);
          variable export_DataSave   : std_logic_vector(63 downto 0);
+         variable export_TagWrite   : std_logic_vector(21 downto 0);
       begin
    
          file_open(f_status, outfile, "R:\\cache_n64_sim.txt", write_mode);
@@ -531,39 +532,43 @@ begin
             wait until rising_edge(clk93);
             wait for 1 ns;
             if (read_ena  = '1' or write_ena = '1' or CacheCommandEna = '1') then
-               export_AddrSave := "000" & RW_addr(28 downto 0);
+               export_AddrSave := "000" & tag_addr_1(28 downto 0);
                export_TagSave  := unsigned(tag_q_b);
             end if; 
             
             if (state = FILL) then
-               wait until ram_grant_2x = '1';
-               wait until ddr3_DOUT_READY = '1';
-               for i in 0 to 1 loop
-                  write(line_out, string'("Fill: I ")); 
-                  write(line_out, to_string_len(tracecounts_out(1) + 1 + i, 8));
-                  write(line_out, string'(" A ")); 
-                  if (i = 0) then write(line_out, to_hstring(ram_reqAddr(31 downto 4) & "0000")); else write(line_out, to_hstring(ram_reqAddr(31 downto 4) & "1000")); end if; 
-                  write(line_out, string'(" T ")); 
-                  write(line_out, to_hstring(tag_data_a(16 downto 0)));
-                  if (tag_data_a(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
-                  write(line_out, string'(" D 0"));
-                  write(line_out, string'(" I ")); 
-                  write(line_out, to_hstring(export_AddrSave(12 downto 4)));
-                  write(line_out, string'(" S ")); 
-                  write(line_out, to_hstring(to_unsigned(i * 2, 4)));
-                  write(line_out, string'(" Data ")); 
-                  write(line_out, to_hstring(ddr3_DOUT));
-                  dcachefull(to_integer(export_AddrSave(12 downto 4)), i) <= ddr3_DOUT;
-                  writeline(outfile, line_out);
-                  wait until rising_edge(clk2x);
+               if (tag_wren_a = '1') then
+                  export_TagWrite := tag_data_a;
+               end if;
+               if (ram_grant_2x = '1') then
+                  wait until ddr3_DOUT_READY = '1';
+                  for i in 0 to 1 loop
+                     write(line_out, string'("Fill: I ")); 
+                     write(line_out, to_string_len(tracecounts_out(1) + 1 + i, 8));
+                     write(line_out, string'(" A ")); 
+                     if (i = 0) then write(line_out, to_hstring(ram_reqAddr(31 downto 4) & "0000")); else write(line_out, to_hstring(ram_reqAddr(31 downto 4) & "1000")); end if; 
+                     write(line_out, string'(" T ")); 
+                     write(line_out, to_hstring(export_TagWrite(16 downto 0)));
+                     if (export_TagWrite(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
+                     write(line_out, string'(" D 0"));
+                     write(line_out, string'(" I ")); 
+                     write(line_out, to_hstring(export_AddrSave(12 downto 4)));
+                     write(line_out, string'(" S ")); 
+                     write(line_out, to_hstring(to_unsigned(i * 2, 4)));
+                     write(line_out, string'(" Data ")); 
+                     write(line_out, to_hstring(ddr3_DOUT));
+                     dcachefull(to_integer(export_AddrSave(12 downto 4)), i) <= ddr3_DOUT;
+                     writeline(outfile, line_out);
+                     wait until rising_edge(clk2x);
+                     wait for 1 ns;
+                  end loop;
+                  wait until ram_done = '1';
                   wait for 1 ns;
-               end loop;
-               wait until ram_done = '1';
-               wait for 1 ns;
-               tracecounts_out(1) <= tracecounts_out(1) + 2;
-               
-               if (isWB = '1') then
-                  export_TagSave  := unsigned(tag_data_a);
+                  tracecounts_out(1) <= tracecounts_out(1) + 2;
+                  
+                  if (isWB = '1') then
+                     export_TagSave  := unsigned(export_TagWrite);
+                  end if;
                end if;
                
             end if;
@@ -575,9 +580,9 @@ begin
                write(line_out, to_hstring(export_AddrSave));
                write(line_out, string'(" T ")); 
                if (ram_done = '1') then
-                  write(line_out, to_hstring(tag_data_a(16 downto 0)));
-                  if (tag_data_a(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
-                  if (tag_data_a(21) = '1') then write(line_out, string'(" D 1")); else write(line_out, string'(" D 0")); end if;
+                  write(line_out, to_hstring(export_TagWrite(16 downto 0)));
+                  if (export_TagWrite(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
+                  if (export_TagWrite(21) = '1') then write(line_out, string'(" D 1")); else write(line_out, string'(" D 0")); end if;
                else
                   write(line_out, to_hstring(export_TagSave(16 downto 0)));
                   if (export_TagSave(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
@@ -593,14 +598,17 @@ begin
             end if;
             
             if (cache_we_b = '1') then
+               if (state /= FILL) then
+                  export_TagWrite := tag_data_a;
+               end if;
                write(line_out, string'("Store: I ")); 
                write(line_out, to_string_len(tracecounts_out(2) + 1, 8));
                write(line_out, string'(" A ")); 
                write(line_out, to_hstring(export_AddrSave(28 downto 13) & unsigned(cache_address_b) & "000"));
                write(line_out, string'(" T ")); 
-               write(line_out, to_hstring(tag_data_a(16 downto 0)));
-               if (tag_data_a(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
-               if (tag_data_a(21) = '1') then write(line_out, string'(" D 1")); else write(line_out, string'(" D 0")); end if;
+               write(line_out, to_hstring(export_TagWrite(16 downto 0)));
+               if (export_TagWrite(20) = '1') then write(line_out, string'(" V 1")); else write(line_out, string'(" V 0")); end if;
+               if (export_TagWrite(21) = '1') then write(line_out, string'(" D 1")); else write(line_out, string'(" D 0")); end if;
                write(line_out, string'(" I ")); 
                write(line_out, to_hstring(export_AddrSave(12 downto 4)));
                write(line_out, string'(" S 0")); 

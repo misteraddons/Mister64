@@ -130,6 +130,8 @@ begin
       DATACACHESLOW         => "0000",
       DATACACHEFORCEWEB     => '0',
       RANDOMMISS            => x"0",
+      DISABLE_BOOTCOUNT     => '0',
+      DISABLE_DTLBMINI      => '0',
       DDR3SLOW              => "0000",
       DISABLEFILTER         => '0',
       DISABLEDITHER         => '0',
