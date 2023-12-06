@@ -14,6 +14,7 @@ set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) cpu_FPU.vh
 set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) cpu.vhd ]
 set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) memorymux.vhd ]
 set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) Gamepad.vhd ]
+set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) pif_cic6105.vhd ]
 set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) pifrom.vhd ]
 set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) pif_cpakinit.vhd ]
 set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) PIF.vhd ]

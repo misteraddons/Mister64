@@ -6,10 +6,6 @@ SDRAM of any size is required.
 ## Bios
 Rename your PIF ROM file (e.g. `pif.ntsc.rom` ) and place it in the `./games/N64/` folder as `boot.rom`
 
-## Video output
-
-Only HDMI supported for now.
-
 ## Error messages
 
 If there is a recognized problem, an overlay is displayed, showing which error has occured.

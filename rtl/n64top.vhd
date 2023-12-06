@@ -429,10 +429,14 @@ architecture arch of n64top is
    signal ce_intern              : std_logic := '0';
    
    -- savestates
-   signal SS_reset               : std_logic;
+   signal ss_reset_1x            : std_logic;
+   signal ss_reset_93            : std_logic;
    signal SS_DataWrite           : std_logic_vector(63 downto 0);
+   signal SS_DataWrite_93        : std_logic_vector(63 downto 0);
    signal SS_Adr                 : unsigned(11 downto 0);
+   signal SS_Adr_93              : unsigned(11 downto 0);
    signal SS_wren                : std_logic_vector(13 downto 0);
+   signal SS_wren_93             : std_logic_vector(13 downto 0);
    signal SS_rden                : std_logic_vector(13 downto 0);
    --signal SS_DataRead_AI         : std_logic_vector(63 downto 0);
    --signal SS_DataRead_RDP        : std_logic_vector(63 downto 0);
@@ -610,7 +614,7 @@ begin
       fifoout_nearfull     => rspfifo_nearfull,
       fifoout_empty        => rspfifo_empty,
       
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(8 downto 0),
       SS_wren_RSP          => SS_wren(7),
@@ -714,7 +718,7 @@ begin
       RSP2RDP_we           => RSP2RDP_we,  
       RSP2RDP_done         => RSP2RDP_done, 
       
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(0 downto 0),
       SS_wren              => SS_wren(4),
@@ -754,7 +758,7 @@ begin
       bus_dataRead         => bus_MI_dataRead, 
       bus_done             => bus_MI_done,
       
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       SS_DataWrite         => SS_DataWrite,
       SS_wren              => SS_wren(1),
       SS_rden              => SS_rden(1),
@@ -830,7 +834,7 @@ begin
       bus_dataRead         => bus_VI_dataRead, 
       bus_done             => bus_VI_done,
       
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(2 downto 0),
       SS_wren              => SS_wren(9),
@@ -867,7 +871,7 @@ begin
       rdram_done           => rdram_done(DDR3MUX_AI),      
       rdram_dataRead       => rdram_dataRead,
 
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(1 downto 0),   
       SS_wren              => SS_wren(0),     
@@ -977,7 +981,7 @@ begin
       bus_cart_dataRead    => bus_PIcart_dataRead, 
       bus_cart_done        => bus_PIcart_done,
       
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(2 downto 0),
       SS_wren              => SS_wren(2),
@@ -1089,7 +1093,7 @@ begin
       eeprom_out           => eeprom_out,   
       eeprom_change        => eeprom_change,
 
-      SS_reset             => SS_reset,
+      SS_reset             => ss_reset_1x,
       loading_savestate    => loading_savestate,
       SS_DataWrite         => SS_DataWrite,
       SS_Adr               => SS_Adr(6 downto 0),   
@@ -1243,7 +1247,7 @@ begin
    port map
    (
       clk1x                => clk1x,
-      ss_reset             => ss_reset,
+      ss_reset             => ss_reset_1x,
                            
       error                => error_sdramMux,
       
@@ -1440,11 +1444,11 @@ begin
       cpu_export           => cpu_export,
 -- synthesis translate_on
 
-      SS_reset             => SS_reset,
+      SS_reset             => SS_reset_93,
       loading_savestate    => loading_savestate,
-      SS_DataWrite         => SS_DataWrite,
-      SS_Adr               => SS_Adr(11 downto 0),   
-      SS_wren_CPU          => SS_wren(10),     
+      SS_DataWrite         => SS_DataWrite_93,
+      SS_Adr               => SS_Adr_93(11 downto 0),   
+      SS_wren_CPU          => SS_wren_93(10),     
       SS_rden_CPU          => SS_rden(10),            
       SS_DataRead_CPU      => open, --SS_DataRead_CPU,
       SS_idle              => open --SS_idle_cpu
@@ -1464,7 +1468,8 @@ begin
       reset_in                => reset,
       reset_out_1x            => reset_intern_1x,
       reset_out_93            => reset_intern_93,
-      ss_reset                => SS_reset,
+      ss_reset_1x             => ss_reset_1x,
+      ss_reset_93             => ss_reset_93,
       
       RAMSIZE8                => RAMSIZE8,
       
@@ -1488,6 +1493,10 @@ begin
       SS_wren                 => SS_wren,       
       SS_rden                 => SS_rden,       
       SS_DataRead_CPU         => (63 downto 0 => '0'),
+      
+      SS_DataWrite_93         => SS_DataWrite_93,
+      SS_Adr_93               => SS_Adr_93,      
+      SS_wren_93              => SS_wren_93,     
 
       loading_savestate       => loading_savestate,
       saving_savestate        => open,

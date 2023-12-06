@@ -132,6 +132,16 @@ architecture arch of pif is
       CLEARREADCOMMAND,
       CLEARCOMPLETE,
       
+      CIC_FIRST1,
+      CIC_FIRST2,
+      CIC_FIRST3,
+      CIC_FIRST4,
+      CIC_READBYTERAM,
+      CIC_SEND1,
+      CIC_RESPONSE1,
+      CIC_RESPONSE2,
+      CIC_WRITEBACK,
+      
       EXTCOMM_FETCHNEXT,
       EXTCOMM_EVALREAD,
       EXTCOMM_EVALCOMMAND,
@@ -171,6 +181,12 @@ architecture arch of pif is
    signal SIPIF_read_latched        : std_logic := '0';
    signal pifreadmode               : std_logic := '0';
    signal pifProcMode               : std_logic := '0';
+   
+   signal cic_input_first           : std_logic := '0';
+   signal cic_input_ena             : std_logic := '0';
+   signal cic_input_data            : std_logic_vector(3 downto 0) := (others => '0');
+   signal cic_output_done           : std_logic := '0';
+   signal cic_output_data           : std_logic_vector(3 downto 0) := (others => '0');
    
    signal EXT_channel               : unsigned(5 downto 0) := (others => '0');
    signal EXT_index                 : unsigned(5 downto 0) := (others => '0');
@@ -302,11 +318,13 @@ begin
    begin
       if rising_edge(clk1x) then
       
-         error         <= '0';
-         pifram_wren   <= '0';
-         eeprom_wren_b <= '0';
-         command_start <= '0';
-         toPad_ena     <= '0';
+         error           <= '0';
+         pifram_wren     <= '0';
+         eeprom_wren_b   <= '0';
+         command_start   <= '0';
+         toPad_ena       <= '0';
+         cic_input_first <= '0';
+         cic_input_ena   <= '0';
          
          if (second_ena = '1' and INITDONE = '0') then
             INITDONE     <= '1';
@@ -457,14 +475,7 @@ begin
                   state     <= CHECKDONE;
                   
                   if (unsigned(ram_q_b) > 1) then
-                     if (ram_q_b(1) = '1') then -- CIC-NUS-6105 challenge/response
-                        report "unimplemented PIF CIC challenge" severity warning;
-                        state         <= WRITEBACKCOMMAND;
-                        ram_wren_b    <= '1';
-                        ram_data_b    <= ram_q_b;
-                        ram_data_b(1) <= '0';
-                        
-                     elsif (ram_q_b(2) = '1') then -- unknown
+                     if (ram_q_b(2) = '1') then -- unknown
                         report "unimplemented PIF unknown command 2" severity warning;
                         state         <= WRITEBACKCOMMAND;
                         ram_wren_b    <= '1';
@@ -503,7 +514,14 @@ begin
                   state   <= CHECKDONE;
                   slowcnt <= 13600;
                   if (ram_q_b(1) = '1') then -- CIC-NUS-6105 challenge/response
-                     null;
+                     if (CICTYPE = CIC_TYPE_6105 or CICTYPE = CIC_TYPE_7105) then
+                        state      <= CIC_FIRST1;
+                     else
+                        state      <= CHECKDONE;
+                     end if;
+                     ram_wren_b    <= '1';
+                     ram_data_b    <= ram_q_b;
+                     ram_data_b(1) <= '0';
                   else
                      state         <= EXTCOMM_FETCHNEXT;
                      EXT_channel   <= (others => '0');
@@ -548,6 +566,60 @@ begin
                   ram_wren_b    <= '1';
                   ram_data_b    <= ram_q_b;
                   ram_data_b(6) <= '0'; 
+                  
+               -- CIC6105
+               when CIC_FIRST1 =>
+                  state           <= CIC_FIRST2;
+                  ram_address_b   <= 6x"2E";
+                  ram_data_b      <= (others => '0');
+                  ram_wren_b      <= '1';
+                  cic_input_first <= '1';
+                  
+               when CIC_FIRST2 =>
+                  state         <= CIC_FIRST3;
+                  ram_address_b <= 6x"2E";
+                  ram_data_b    <= (others => '0');
+                  ram_wren_b    <= '1';
+                  
+               when CIC_FIRST3 =>
+                  state         <= CIC_FIRST4;
+                  ram_address_b <= 6x"2F";
+                  ram_wren_b    <= '1';
+               
+               when CIC_FIRST4 =>
+                  state         <= CIC_READBYTERAM;
+                  ram_address_b <= 6x"30";
+                  ram_data_b    <= (others => '0');
+               
+               when CIC_READBYTERAM =>
+                  state         <= CIC_SEND1;
+                  
+               when CIC_SEND1 =>
+                  state          <= CIC_RESPONSE1;
+                  cic_input_ena  <= '1';
+                  cic_input_data <= ram_q_b(7 downto 4);
+               
+               when CIC_RESPONSE1 =>
+                  if (cic_output_done = '1') then
+                     state                  <= CIC_RESPONSE2;
+                     ram_data_b(7 downto 4) <= cic_output_data;
+                     cic_input_ena          <= '1';
+                     cic_input_data         <= ram_q_b(3 downto 0);
+                  end if;
+               
+               when CIC_RESPONSE2 =>
+                  if (cic_output_done = '1') then
+                     state                  <= CIC_WRITEBACK;
+                     ram_data_b(3 downto 0) <= cic_output_data;
+                     ram_wren_b             <= '1';
+                  end if;               
+            
+               when CIC_WRITEBACK =>
+                  state         <= CIC_READBYTERAM;
+                  ram_address_b <= std_logic_vector(unsigned(ram_address_b) + 1);
+                  if (ram_address_b = 6x"3E") then
+                     state <= CHECKDONE;
+                  end if;
             
                -- extern communication
                when EXTCOMM_FETCHNEXT =>
@@ -895,6 +967,21 @@ begin
    eeprom_addr_a <= eeprom_addr_clear when (EEPROMState = EEPROM_CLEAR) else eeprom_addr;
    eeprom_wren_a <= '1'               when (EEPROMState = EEPROM_CLEAR) else eeprom_wren;
    eeprom_in_a   <= x"FFFFFFFF"       when (EEPROMState = EEPROM_CLEAR) else eeprom_in;
+
+--##############################################################
+--############################### CIC 6105
+--##############################################################
+
+   ipif_cic6105 : entity work.pif_cic6105
+   port map
+   (
+      clk1x                => clk1x,          
+      cic_input_first      => cic_input_first,
+      cic_input_ena        => cic_input_ena,  
+      cic_input_data       => cic_input_data, 
+      cic_output_done      => cic_output_done,
+      cic_output_data      => cic_output_data  
+   );
 
 --##############################################################
 --############################### export

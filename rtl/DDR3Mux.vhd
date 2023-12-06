@@ -142,9 +142,37 @@ architecture arch of DDR3Mux is
    signal slow_on    : std_logic := '0';
    signal slowcnt    : unsigned(10 downto 0) := (others => '0');
 
+   -- clk1x transfer
+   signal ddr3_DOUT_READY_1 : std_logic := '0';
+   signal rdram_dataRead_2x : std_logic_vector(63 downto 0);
+
+   signal clk1x_captureNext : std_logic := '0';
+
 begin 
 
    ddr3_ADDR(28 downto 25) <= "0011";
+   
+   process (clk1x)
+   begin
+      if rising_edge(clk1x) then
+      
+         if (ddr3State = WAITREAD) then
+            clk1x_captureNext <= '1';
+         end if;
+         
+         if (clk1x_captureNext = '1') then
+            if (ddr3_DOUT_READY = '1') then
+               rdram_dataRead    <= ddr3_DOUT;
+               clk1x_captureNext <= '0';
+            end if;
+            if (ddr3_DOUT_READY_1 = '1') then
+               rdram_dataRead    <= rdram_dataRead_2x;
+               clk1x_captureNext <= '0';
+            end if;
+         end if;
+      
+      end if;
+   end process;
 
    process (clk2x)
       variable activeRequest : std_logic;
@@ -158,10 +186,11 @@ begin
          error_outRDP   <= '0';
          error_outRDPZ  <= '0';
          
-         
          rspfifo_Rd  <= '0';
          rdpfifo_Rd  <= '0';
          rdpfifoZ_Rd <= '0';
+         
+         ddr3_DOUT_READY_1 <= ddr3_DOUT_READY;
          
          RAMSIZE8_2x <= RAMSIZE8;
       
@@ -303,9 +332,9 @@ begin
                   error <= '1';
                end if;
                if (ddr3_DOUT_READY = '1') then
-                  rdram_dataRead  <= ddr3_DOUT;
-                  timeoutCount    <= (others => '0');
-                  readCount       <= readCount - 1;
+                  rdram_dataRead_2x <= ddr3_DOUT;
+                  timeoutCount      <= (others => '0');
+                  readCount         <= readCount - 1;
                   if (readCount = 1) then
                      if (lastReadReq = '1') then
                         if (slow_on = '1') then

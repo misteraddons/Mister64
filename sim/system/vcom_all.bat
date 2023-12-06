@@ -44,6 +44,7 @@ src/tb/cpu_mul.vhd ^
 ../../rtl/memorymux.vhd ^
 ../../rtl/pif_cpakinit.vhd ^
 ../../rtl/Gamepad.vhd ^
+../../rtl/pif_cic6105.vhd ^
 ../../rtl/pifrom_ntsc_fast.vhd ^
 ../../rtl/PIF.vhd ^
 ../../rtl/RSP_package.vhd ^

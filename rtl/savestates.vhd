@@ -15,7 +15,8 @@ entity savestates is
       reset_in                : in  std_logic;
       reset_out_1x            : out std_logic := '0';
       reset_out_93            : out std_logic := '0';
-      ss_reset                : out std_logic := '0';
+      ss_reset_1x             : out std_logic := '0';
+      ss_reset_93             : out std_logic := '0';
          
       RAMSIZE8                : in  std_logic;
          
@@ -39,6 +40,10 @@ entity savestates is
       SS_wren                 : out std_logic_vector(SAVETYPESCOUNT - 1 downto 0);
       SS_rden                 : out std_logic_vector(SAVETYPESCOUNT - 1 downto 0);
       SS_DataRead_CPU         : in  std_logic_vector(63 downto 0) := (others => '0');
+            
+      SS_DataWrite_93         : out std_logic_vector(63 downto 0) := (others => '0');
+      SS_Adr_93               : out unsigned(11 downto 0) := (others => '0');
+      SS_wren_93              : out std_logic_vector(SAVETYPESCOUNT - 1 downto 0);
             
       loading_savestate       : out std_logic := '0';
       saving_savestate        : out std_logic := '0';
@@ -146,7 +151,11 @@ begin
    process (clk93)
    begin
       if rising_edge(clk93) then
-         reset_out_93 <= reset_intern;
+         reset_out_93    <= reset_intern;
+         ss_reset_93     <= ss_reset_1x;
+         SS_DataWrite_93 <= SS_DataWrite;
+         SS_Adr_93       <= SS_Adr;      
+         SS_wren_93      <= SS_wren;     
       end if;
    end process;
 
@@ -155,7 +164,7 @@ begin
       if rising_edge(clk1x) then
       
          reset_intern  <= '0';
-         ss_reset      <= '0';
+         ss_reset_1x   <= '0';
          rdram_request <= '0';
          
          reset_out_1x <= reset_intern;
@@ -196,7 +205,7 @@ begin
                if (reset_in = '1') then
                   state                <= WAITPAUSE;
                   reset_intern         <= '1';
-                  ss_reset             <= '1';
+                  ss_reset_1x          <= '1';
                   resetMode            <= '1';
                   savemode             <= '0';
                   savetype_counter     <= 12;
@@ -210,7 +219,7 @@ begin
                elsif (load = '1') then
                   state                <= WAITPAUSE;
                   reset_intern         <= '1';
-                  ss_reset             <= '1';
+                  ss_reset_1x          <= '1';
                   resetMode            <= '0';
                   savemode             <= '0';
                   savetype_counter     <= 0;
@@ -229,7 +238,7 @@ begin
                      unstallwait <= unstallwait - 1;
                   elsif (savemode = '0') then
                      reset_intern <= '1';
-                     ss_reset     <= '1';
+                     ss_reset_1x  <= '1';
                      unstallwait  <= 1023;
                   end if;
                end if;
@@ -442,7 +451,7 @@ begin
                      state                <= LOADMEMORY_NEXT;
                      loading_ss           <= '1';
                      reset_intern         <= '1';
-                     ss_reset             <= '1';
+                     ss_reset_1x          <= '1';
                   else
                      state                <= IDLE;
                   end if;

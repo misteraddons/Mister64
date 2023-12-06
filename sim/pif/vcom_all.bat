@@ -11,6 +11,7 @@ vcom -2008 -quiet -work sim/n64 ^
 ../../rtl/SDRamMux.vhd ^
 ../../rtl/pif_cpakinit.vhd ^
 ../../rtl/Gamepad.vhd ^
+../../rtl/pif_cic6105.vhd ^
 ../../rtl/pifrom_ntsc_fast.vhd ^
 ../../rtl/PIF.vhd
 
