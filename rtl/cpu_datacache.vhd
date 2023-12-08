@@ -25,7 +25,6 @@ entity cpu_datacache is
       ram_active        : in  std_logic := '0';
       ram_grant         : in  std_logic := '0';
       ram_done          : in  std_logic := '0';
-      ram_addr          : in  unsigned(31 downto 0);
       ddr3_DOUT         : in  std_logic_vector(63 downto 0);
       ddr3_DOUT_READY   : in  std_logic;
       
@@ -206,7 +205,7 @@ begin
          end if;
          
          if (ram_grant = '1') then
-            cache_addr_a <= ram_addr(12 downto 4) & "0";
+            cache_addr_a <= tag_read_addr(12 downto 4) & "0";
          elsif (ddr3_DOUT_READY = '1') then
             cache_addr_a <= cache_addr_a + 1;
             if (ram_grant_2x = '1' and cache_addr_a(0) = '1') then

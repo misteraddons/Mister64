@@ -15,7 +15,8 @@ entity cpu_TLB_data is
       TLB_Req              : in  std_logic;
       TLB_IsWrite          : in  std_logic;
       TLB_AddrIn           : in  unsigned(63 downto 0);
-      TLB_useCache         : out std_logic := '0';  
+      TLB_useCacheFound    : out std_logic := '0';  
+      TLB_useCacheLookup   : out std_logic := '0';  
       TLB_Stall            : out std_logic := '0';
       TLB_UnStall          : out std_logic := '0';
       TLB_AddrOutFound     : out unsigned(31 downto 0) := (others => '0');
@@ -76,18 +77,18 @@ begin
    process (all)
    begin
    
-      mini_hit         <= '0';
-      TLB_useCache     <= miniEntries(0).cached;
-      TLB_AddrOutFound <= miniEntries(0).physical(31 downto 12) & TLB_AddrIn(11 downto 0);
+      mini_hit          <= '0';
+      TLB_useCacheFound <= miniEntries(0).cached;
+      TLB_AddrOutFound  <= miniEntries(0).physical(31 downto 12) & TLB_AddrIn(11 downto 0);
       
       for i in 0 to MINICOUNT - 1 loop
          if (miniEntries(i).valid = '1') then
             if (TLB_AddrIn(39 downto 12) = miniEntries(i).virtual(39 downto 12)) then
                if (TLB_AddrIn(63 downto 62) = miniEntries(i).region) then
                   if (TLB_IsWrite = '0' or miniEntries(i).dirty = '1') then
-                     mini_hit         <= '1';
-                     TLB_useCache     <= miniEntries(i).cached;
-                     TLB_AddrOutFound <= miniEntries(i).physical(31 downto 12) & TLB_AddrIn(11 downto 0);
+                     mini_hit          <= '1';
+                     TLB_useCacheFound <= miniEntries(i).cached;
+                     TLB_AddrOutFound  <= miniEntries(i).physical(31 downto 12) & TLB_AddrIn(11 downto 0);
                   end if;
                end if;
             end if;
@@ -148,6 +149,7 @@ begin
                         state         <= EXCEPTION;
                      end if;
                      TLB_AddrOutLookup  <= TLB_fetchAddrOut;
+                     TLB_useCacheLookup <= TLB_fetchCached;
                      TLB_ExcRead        <= (TLB_fetchExcInvalid or TLB_fetchExcNotFound) and (not TLB_fetchIsWrite);
                      TLB_ExcWrite       <= (TLB_fetchExcInvalid or TLB_fetchExcNotFound) and TLB_fetchIsWrite;
                      TLB_ExcMiss        <= TLB_fetchExcNotFound;

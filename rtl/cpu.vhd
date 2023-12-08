@@ -21,6 +21,7 @@ entity cpu is
       DATACACHEON           : in  std_logic;
       DATACACHESLOW         : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB     : in  std_logic;
+      DATACACHETLBON        : in  std_logic;
       RANDOMMISS            : in  unsigned(3 downto 0);
       DISABLE_BOOTCOUNT     : in  std_logic;
       DISABLE_DTLBMINI      : in  std_logic;
@@ -533,7 +534,8 @@ architecture arch of cpu is
    signal TLB_instrUnStall             : std_logic;
    signal TLB_instrAddrOutFound        : unsigned(31 downto 0);   
    signal TLB_instrAddrOutLookup       : unsigned(31 downto 0);   
-   signal TLB_dataUseCache             : std_logic;
+   signal TLB_dataUseCacheFound        : std_logic;
+   signal TLB_dataUseCacheLookup       : std_logic;
    signal TLB_dataStall                : std_logic;
    signal TLB_dataUnStall              : std_logic;
    signal TLB_dataAddrOutFound         : unsigned(31 downto 0);
@@ -595,6 +597,7 @@ architecture arch of cpu is
    
    -- Cache
    signal DATACACHEON_intern           : std_logic := '0';
+   signal DATACACHETLBON_intern        : std_logic := '0';
    signal datacache_request            : std_logic;
    signal datacache_active             : std_logic := '0';
    signal datacache_reqAddr            : unsigned(31 downto 0);
@@ -1034,11 +1037,9 @@ begin
       SS_reset          => SS_reset
    );
    
-   -- todo: only in kernelmode and only in 32bit mode
-   -- todo: check both addresses and TLB type!
    fetchCache     <= '0' when (INSTRCACHEON = '0') else
                      TLB_instrUseCache when (TLB_instrMapped = '1') else
-                     '1' when (FetchAddr1(31 downto 29) = "100") else 
+                     '1' when (FetchAddr1(31 downto 29) = "100") else  -- todo: only in kernelmode and only in 32bit mode
                      '0';
    
    FetchAddr <= FetchAddr2 when (FetchAddrSelect = '1') else FetchAddr1;
@@ -2227,7 +2228,7 @@ begin
                    '1' when (privilegeMode = "10" and (calcMemAddr(31 downto 29) < 4)) else
                    '0';
    
-   EXETLBDataAccess <= decodeMemReadEnable or decodeMemWriteEnable when (EXETLBMapped = '1' and exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+   EXETLBDataAccess <= decodeMemReadEnable or decodeMemWriteEnable or decodeCacheEnable when (EXETLBMapped = '1' and exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
 
    ---------------------- load/store ------------------
    
@@ -2430,12 +2431,21 @@ begin
                executeMemAddress   <= TLB_dataAddrOutLookup;
                executeNew          <= '1';
                if (exception = '0') then
-                  executeStallFromMEM <= '1';
+                  if (executeMemReadEnable = '1') then
+                     executeStallFromMEM <= '1';
+                  else
+                     stall3              <= '0';
+                  end if;
                else
                   stall3                <= '0';
                   executeMemReadEnable  <= '0';
                   executeMemWriteEnable <= '0';
                   executeCacheEnable    <= '0';
+               end if;
+               if (TLB_dataUseCacheLookup = '1' and DATACACHEON_intern = '1') then
+                  executeMemUseCache <= DATACACHETLBON_intern;
+               else
+                  executeMemUseCache <= '0';
                end if;
             end if;
             
@@ -2542,7 +2552,9 @@ begin
 
                      executeMemUseCache <= '0';
                      if (EXETLBDataAccess = '1') then
-                        executeMemUseCache <= '0'; -- todo
+                        if (TLB_dataUseCacheFound = '1' and DATACACHEON_intern = '1') then
+                           executeMemUseCache <= DATACACHETLBON_intern;
+                        end if;
                      else
                         if (to_integer(unsigned(calcMemAddr(31 downto 29))) = 4 and privilegeMode = "00" and DATACACHEON_intern = '1') then
                            executeMemUseCache <= '1';
@@ -2552,7 +2564,7 @@ begin
                      executeCacheEnable            <= decodeCacheEnable;
                      executeCacheCommand           <= decodeSource2;
                      
-                     if (EXETLBMapped = '1' or DATACACHEON_intern = '0') then -- todo: allow datacache with TLB
+                     if (DATACACHEON_intern = '0' or (DATACACHETLBON_intern = '0' and EXETLBDataAccess = '1')) then
                         executeCacheEnable <= '0';
                      end if;
                      
@@ -2714,7 +2726,6 @@ begin
       ram_active        => datacache_active,
       ram_grant         => rdram_granted2X,
       ram_done          => mem_finished_read,
-      ram_addr          => mem_address,
       ddr3_DOUT         => ddr3_DOUT,      
       ddr3_DOUT_READY   => ddr3_DOUT_READY,
       
@@ -2855,7 +2866,8 @@ begin
    begin
       if (rising_edge(clk93)) then
       
-         DATACACHEON_intern <= DATACACHEON;
+         DATACACHEON_intern    <= DATACACHEON;
+         DATACACHETLBON_intern <= DATACACHETLBON;
       
          if (reset_93 = '1') then
          
@@ -3261,7 +3273,8 @@ begin
       TLB_dataReq             => EXETLBDataAccess,   
       TLB_dataIsWrite         => decodeMemWriteEnable,   
       TLB_dataAddrIn          => calcMemAddr,
-      TLB_dataUseCache        => TLB_dataUseCache,
+      TLB_dataUseCacheFound   => TLB_dataUseCacheFound,
+      TLB_dataUseCacheLookup  => TLB_dataUseCacheLookup,
       TLB_dataStall           => TLB_dataStall,
       TLB_dataUnStall         => TLB_dataUnStall,
       TLB_dataAddrOutFound    => TLB_dataAddrOutFound,

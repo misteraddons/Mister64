@@ -42,6 +42,7 @@ entity n64top is
       DATACACHEON             : in  std_logic;
       DATACACHESLOW           : in  std_logic_vector(3 downto 0); 
       DATACACHEFORCEWEB       : in  std_logic; 
+      DATACACHETLBON          : in  std_logic; 
       RANDOMMISS              : in  unsigned(3 downto 0);
       DISABLE_BOOTCOUNT       : in  std_logic;
       DISABLE_DTLBMINI        : in  std_logic;
@@ -1407,6 +1408,7 @@ begin
       DATACACHEON          => DATACACHEON,
       DATACACHESLOW        => DATACACHESLOW,
       DATACACHEFORCEWEB    => DATACACHEFORCEWEB,
+      DATACACHETLBON       => DATACACHETLBON,
       RANDOMMISS           => RANDOMMISS,
       DISABLE_BOOTCOUNT    => DISABLE_BOOTCOUNT,
       DISABLE_DTLBMINI     => DISABLE_DTLBMINI, 

@@ -129,6 +129,7 @@ begin
       DATACACHEON           => '1',
       DATACACHESLOW         => "0000",
       DATACACHEFORCEWEB     => '0',
+      DATACACHETLBON        => '1',
       RANDOMMISS            => x"0",
       DISABLE_BOOTCOUNT     => '0',
       DISABLE_DTLBMINI      => '0',

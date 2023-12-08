@@ -82,7 +82,8 @@ entity cpu_cop0 is
       TLB_dataReq             : in  std_logic;
       TLB_dataIsWrite         : in  std_logic;
       TLB_dataAddrIn          : in  unsigned(63 downto 0);
-      TLB_dataUseCache        : out std_logic;
+      TLB_dataUseCacheFound   : out std_logic;
+      TLB_dataUseCacheLookup  : out std_logic;
       TLB_dataStall           : out std_logic;
       TLB_dataUnStall         : out std_logic;
       TLB_dataAddrOutFound    : out unsigned(31 downto 0);
@@ -689,7 +690,6 @@ begin
                            COP0_13_CAUSE_interruptPending(7) <= '0';
                         
                         when 12 =>
-                           -- todo: missing setMode
                            COP0_12_SR_interruptEnable     <= writeValue(0 );
                            COP0_12_SR_exceptionLevel      <= writeValue(1 );
                            COP0_12_SR_errorLevel          <= writeValue(2 );
@@ -1172,7 +1172,8 @@ begin
       TLB_Req              => TLB_dataReq,  
       TLB_IsWrite          => TLB_dataIsWrite,     
       TLB_AddrIn           => TLB_dataAddrIn, 
-      TLB_useCache         => TLB_dataUseCache, 
+      TLB_useCacheFound    => TLB_dataUseCacheFound, 
+      TLB_useCacheLookup   => TLB_dataUseCacheLookup, 
       TLB_Stall            => TLB_dataStall,  
       TLB_UnStall          => TLB_dataUnStall,
       TLB_AddrOutFound     => TLB_dataAddrOutFound,
