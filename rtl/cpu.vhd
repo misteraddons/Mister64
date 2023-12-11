@@ -204,7 +204,8 @@ architecture arch of cpu is
    signal instrcache_data              : std_logic_vector(31 downto 0);
    signal instrcache_fill              : std_logic := '0';
    signal instrcache_fill_done         : std_logic;
-   signal cache_commandEnable          : std_logic;
+   signal cache_commandEnableI         : std_logic;
+   signal cache_commandEnableD         : std_logic;
    
    signal cacheHitLast                 : std_logic := '0';
    
@@ -459,7 +460,8 @@ architecture arch of cpu is
    signal executeCOP2ReadEnable        : std_logic := '0';
    signal executeCOP64                 : std_logic := '0';
    signal executeLoadType              : CPU_LOADTYPE;
-   signal executeCacheEnable           : std_logic := '0';
+   signal executeICacheEnable          : std_logic := '0';
+   signal executeDCacheEnable          : std_logic := '0';
    signal executeCacheCommand          : unsigned(4 downto 0) := (others => '0');
    signal executeCOP1Target            : unsigned(4 downto 0) := (others => '0');
    signal executeCOP1ReadEnable        : std_logic := '0';
@@ -997,7 +999,7 @@ begin
 --############################### stage 1
 --##############################################################
    
-   cache_commandEnable <= executeCacheEnable when (stall = 0) else '0';
+   cache_commandEnableI <= executeICacheEnable when (stall = 0) else '0';
    
    icpu_instrcache : entity work.cpu_instrcache
    port map
@@ -1027,7 +1029,7 @@ begin
       fill_addrTag      => fill_addrTag,
       fill_done         => instrcache_fill_done,
       
-      CacheCommandEna   => cache_commandEnable,
+      CacheCommandEna   => cache_commandEnableI,
       CacheCommand      => executeCacheCommand,
       CacheCommandAddr  => executeMemAddress,
       
@@ -2351,7 +2353,8 @@ begin
             executeMemWriteEnable         <= '0';
             executeMemReadEnable          <= '0';
             executeCOP0WriteEnable        <= '0';
-            executeCacheEnable            <= '0';
+            executeICacheEnable           <= '0';
+            executeDCacheEnable           <= '0';
             llBit                         <= '0';
             hiloWait                      <= 0;
             
@@ -2440,7 +2443,8 @@ begin
                   stall3                <= '0';
                   executeMemReadEnable  <= '0';
                   executeMemWriteEnable <= '0';
-                  executeCacheEnable    <= '0';
+                  executeICacheEnable   <= '0';
+                  executeDCacheEnable   <= '0';
                end if;
                if (TLB_dataUseCacheLookup = '1' and DATACACHEON_intern = '1') then
                   executeMemUseCache <= DATACACHETLBON_intern;
@@ -2453,7 +2457,8 @@ begin
             if (stall = 0) then
             
                executeNew              <= '0';
-               executeCacheEnable      <= '0';
+               executeICacheEnable     <= '0';
+               executeDCacheEnable     <= '0';
                
                resultData              <= resultDataMuxed64;    
                resultTarget            <= decodeTarget;
@@ -2493,7 +2498,8 @@ begin
                      resultWriteEnable      <= '0';
                      executeCOP0WriteEnable <= '0';
                      executeCOP0ReadEnable  <= '0';
-                     executeCacheEnable     <= '0';
+                     executeICacheEnable    <= '0';
+                     executeDCacheEnable    <= '0';
                      executeMemReadEnable   <= '0';
                      executeMemWriteEnable  <= '0';
                   
@@ -2561,11 +2567,12 @@ begin
                         end if;
                      end if;
 
-                     executeCacheEnable            <= decodeCacheEnable;
+                     executeICacheEnable           <= decodeCacheEnable;
+                     executeDCacheEnable           <= decodeCacheEnable;
                      executeCacheCommand           <= decodeSource2;
                      
                      if (DATACACHEON_intern = '0' or (DATACACHETLBON_intern = '0' and EXETLBDataAccess = '1')) then
-                        executeCacheEnable <= '0';
+                        executeDCacheEnable <= '0';
                      end if;
                      
                      execute_TLBR                  <= decodeTLBR; 
@@ -2707,6 +2714,8 @@ begin
 --############################### stage 4
 --##############################################################
 
+   cache_commandEnableD <= executeDCacheEnable when (stall = 0) else '0';
+
    icpu_datacache : entity work.cpu_datacache
    port map
    (
@@ -2746,7 +2755,7 @@ begin
       write_data        => std_logic_vector(executeMemWriteData),
       write_done        => datacache_writedone,
       
-      CacheCommandEna   => cache_commandEnable,
+      CacheCommandEna   => cache_commandEnableD,
       CacheCommand      => executeCacheCommand,
       CachecommandStall => datacache_CmdStall,
       CachecommandDone  => datacache_CmdDone,    
@@ -2907,7 +2916,7 @@ begin
                   writebackReadLastData        <= executeMemReadLastData;
 
                   writebackWriteEnable         <= resultWriteEnable;
-                  writeback_UseCache           <= datacache_readena or datacache_writeena or executeCacheEnable;
+                  writeback_UseCache           <= datacache_readena or datacache_writeena or executeDCacheEnable;
                   
                   writeback_COP1_ReadEnable    <= executeCOP1ReadEnable;
                   cop1_stage4_target           <= executeCOP1Target;

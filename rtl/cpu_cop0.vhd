@@ -228,6 +228,7 @@ architecture arch of cpu_cop0 is
    signal TLBINIT_virtAddr                : std_logic_vector(26 downto 0);
    signal TLBINIT_ASID                    : std_logic_vector(7 downto 0);
    signal TLBINIT_region                  : std_logic_vector(1 downto 0);
+   signal TLBINIT_random                  : std_logic;
    
    signal TLBWRITE_global                 : std_logic;
    signal TLBWRITE_valid0                 : std_logic;
@@ -242,6 +243,7 @@ architecture arch of cpu_cop0 is
    signal TLBWRITE_virtAddr               : unsigned(26 downto 0);
    signal TLBWRITE_ASID                   : unsigned(7 downto 0);
    signal TLBWRITE_region                 : unsigned(1 downto 0);
+   signal TLBWRITE_random                 : std_logic;
    
    signal TLBREAD_global                  : std_logic;
    signal TLBREAD_valid0                  : std_logic;
@@ -256,12 +258,13 @@ architecture arch of cpu_cop0 is
    signal TLBREAD_virtAddr                : unsigned(26 downto 0);
    signal TLBREAD_ASID                    : unsigned(7 downto 0);
    signal TLBREAD_region                  : unsigned(1 downto 0);
+   signal TLBREAD_random                  : std_logic;
    
    signal TLBMEM_writeEnable              : std_logic;
-   signal TLBMEM_writeData                : std_logic_vector(99 downto 0);
+   signal TLBMEM_writeData                : std_logic_vector(100 downto 0);
    signal TLBMEM_writeAddr                : std_logic_vector(4 downto 0);
    signal TLBMEM_readAddr                 : std_logic_vector(4 downto 0);
-   signal TLBMEM_readData                 : std_logic_vector(99 downto 0);
+   signal TLBMEM_readData                 : std_logic_vector(100 downto 0);
    
    signal TLB_ExcInstrRead                : std_logic;
    signal TLB_ExcInstrMiss                : std_logic;
@@ -269,6 +272,9 @@ architecture arch of cpu_cop0 is
    signal TLB_ExcDataWrite                : std_logic;
    signal TLB_ExcDataDirty                : std_logic;
    signal TLB_ExcDataMiss                 : std_logic;
+   
+   signal TLB_InstrClearEna               : std_logic;
+   signal TLB_InstrClearIndex             : unsigned(4 downto 0);
    
    signal TLB_Instr_fetchReq              : std_logic;
    signal TLB_Data_fetchReq               : std_logic;
@@ -301,6 +307,7 @@ architecture arch of cpu_cop0 is
       virtAddr               : unsigned(26 downto 0);
       ASID                   : unsigned(7 downto 0);
       region                 : unsigned(1 downto 0);
+      random                 : std_logic;
    end record; 
    type tTLBENTRYS  is array(0 to 31) of tTLBENTRY;
    signal TLBENTRYS : tTLBENTRYS;
@@ -964,11 +971,8 @@ begin
                            
                            TLB_fetchDirty <= TLB_dirty;
                            
-                           TLB_fetchRandom <= '0';
-                           if (TLB_readAddr > 1) then
-                              TLB_fetchRandom <= '1';
-                           end if;
-                     
+                           TLB_fetchRandom <= TLBREAD_random;
+                           
                            if (TLBState = TLBINSTR) then
                               TLB_Instr_fetchDone <= '1';
                            else
@@ -985,10 +989,16 @@ begin
 
          end if; -- ce
          
+         TLB_init <= '0';
          
-         if (SS_reset = '1') then
-            TLB_resetAddr    <= (others => '1');
-            TLB_resetMode    <= '1';
+         if (SS_reset = '1' or TLB_InstrClearEna = '1') then
+            if (TLB_InstrClearEna = '1') then
+               TLB_init         <= '1';
+               TLB_resetAddr    <= TLB_InstrClearIndex;
+            else
+               TLB_resetAddr    <= (others => '1');
+               TLB_resetMode    <= '1';
+            end if;
             TLBINIT_global   <= '0';
             TLBINIT_valid0   <= '0';
             TLBINIT_valid1   <= '0';
@@ -1002,9 +1012,9 @@ begin
             TLBINIT_virtAddr <= (others => '0');
             TLBINIT_ASID     <= (others => '0');
             TLBINIT_region   <= (others => '0');
+            TLBINIT_random   <= '0';
          end if;
          
-         TLB_init <= '0';
          if (TLB_resetMode = '1') then
             TLB_resetAddr <= TLB_resetAddr + 1;
             TLB_init      <= '1';
@@ -1029,6 +1039,7 @@ begin
                TLBINIT_valid1   <= SS_DataWrite(58);
                TLBINIT_dirty0   <= SS_DataWrite(59);
                TLBINIT_dirty1   <= SS_DataWrite(60);
+               TLBINIT_random   <= SS_DataWrite(61);
             end if;
          end if;
          
@@ -1071,6 +1082,7 @@ begin
    TLBWRITE_virtAddr(11 downto  0) <= COP0_10_ENTRYHI_virtualAddress(11 downto 0) and (not TLBWRITE_pageMask);
    TLBWRITE_ASID     <= COP0_10_ENTRYHI_addressSpaceID;
    TLBWRITE_region   <= COP0_10_ENTRYHI_region;
+   TLBWRITE_random   <= TLBWR;
    
    TLBMEM_writeData(0)            <= TLBINIT_global    when (TLB_init = '1') else TLBWRITE_global;  
    TLBMEM_writeData(1)            <= TLBINIT_valid0    when (TLB_init = '1') else TLBWRITE_valid0;  
@@ -1084,7 +1096,8 @@ begin
    TLBMEM_writeData(62 downto 51) <= TLBINIT_pageMask  when (TLB_init = '1') else std_logic_vector(TLBWRITE_pageMask);
    TLBMEM_writeData(89 downto 63) <= TLBINIT_virtAddr  when (TLB_init = '1') else std_logic_vector(TLBWRITE_virtAddr);
    TLBMEM_writeData(97 downto 90) <= TLBINIT_ASID      when (TLB_init = '1') else std_logic_vector(TLBWRITE_ASID);    
-   TLBMEM_writeData(99 downto 98) <= TLBINIT_region    when (TLB_init = '1') else std_logic_vector(TLBWRITE_region);  
+   TLBMEM_writeData(99 downto 98) <= TLBINIT_region    when (TLB_init = '1') else std_logic_vector(TLBWRITE_region); 
+   TLBMEM_writeData(100)          <= TLBINIT_random    when (TLB_init = '1') else TLBWRITE_random;   
 
    TLBMEM_writeEnable <= '1' when (TLB_init = '1') else
                          '1' when (exception = '0' and stall4Masked = 0 and executeNew = '1' and (TLBWI = '1' or TLBWR = '1')) else 
@@ -1097,7 +1110,7 @@ begin
    iTLBMEM : entity mem.RamMLAB
 	GENERIC MAP 
    (
-      width      => 100,
+      width      => 101,
       widthad    => 5
 	)
 	PORT MAP (
@@ -1125,6 +1138,7 @@ begin
    TLBREAD_virtAddr <= unsigned(TLBMEM_readData(89 downto 63));
    TLBREAD_ASID     <= unsigned(TLBMEM_readData(97 downto 90));
    TLBREAD_region   <= unsigned(TLBMEM_readData(99 downto 98));
+   TLBREAD_random   <= TLBMEM_readData(100);
    
    icpu_TLB_instr : entity work.cpu_TLB_instr
    port map
@@ -1149,13 +1163,17 @@ begin
       TLB_ExcRead          => TLB_ExcInstrRead,
       TLB_ExcMiss          => TLB_ExcInstrMiss, 
       
+      TLB_ClearEna         => TLB_InstrClearEna,  
+      TLB_ClearIndex       => TLB_InstrClearIndex,
+      
       TLB_fetchReq         => TLB_Instr_fetchReq,          
       TLB_fetchAddrIn      => TLB_Instr_fetchAddrIn,     
       TLB_fetchDone        => TLB_Instr_fetchDone,       
       TLB_fetchExcInvalid  => TLB_fetchExcInvalid,  
       TLB_fetchExcNotFound => TLB_fetchExcNotFound,
       TLB_fetchCached      => TLB_fetchCached,     
-      TLB_fetchRandom      => TLB_fetchRandom,     
+      TLB_fetchRandom      => TLB_fetchRandom, 
+      TLB_fetchSource      => TLB_fetchSource,
       TLB_fetchAddrOut     => TLB_fetchAddrOut 
    );
    
@@ -1214,6 +1232,7 @@ begin
             TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).virtAddr <= unsigned(TLBMEM_writeData(89 downto 63));
             TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).ASID     <= unsigned(TLBMEM_writeData(97 downto 90));
             TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).region   <= unsigned(TLBMEM_writeData(99 downto 98));
+            TLBENTRYS(to_integer(unsigned(TLBMEM_writeAddr))).random   <= TLBMEM_writeData(100);
          end if;
       end if;
    end process;

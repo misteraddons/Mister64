@@ -432,7 +432,7 @@ parameter CONF_STR = {
    "P3O[100],Data Cache from TLB,On,Off;",
    "P3O[29],Data FORCE WB,Off,On;",
    "P3O[99],DTLB Mini Cache,On,Off;",
-   //"P3O[97:94],iTLB Random Miss,Off,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60;",
+   //"P3O[97:94],iTLB Random Miss,Off,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;",
    "P3O[27:24],Cache Delay,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15;",
    "P3O[23:20],DDR3 Delay,0,16,24,32,40,48,56,64,72,80,88,96,104,112;",
    "P3O[98],RDRAM Calib Waittime,On,Off;",

@@ -25,6 +25,9 @@ entity cpu_TLB_instr is
       TLB_ExcRead          : out std_logic := '0';
       TLB_ExcMiss          : out std_logic := '0';
       
+      TLB_ClearEna         : out std_logic := '0';
+      TLB_ClearIndex       : out unsigned(4 downto 0) := (others => '0');
+      
       TLB_fetchReq         : out std_logic := '0';
       TLB_fetchAddrIn      : out unsigned(63 downto 0) := (others => '0');
       TLB_fetchDone        : in  std_logic;
@@ -32,6 +35,7 @@ entity cpu_TLB_instr is
       TLB_fetchExcNotFound : in  std_logic;
       TLB_fetchCached      : in  std_logic;
       TLB_fetchRandom      : in  std_logic;
+      TLB_fetchSource      : in  unsigned(4 downto 0);
       TLB_fetchAddrOut     : in  unsigned(31 downto 0)
    );
 end entity;
@@ -74,7 +78,8 @@ begin
    begin
       if (rising_edge(clk93)) then
       
-         random_checkCnt <= RANDOMMISS & "00";
+         --random_checkCnt <= RANDOMMISS & "00";
+         random_checkCnt <= "00" & RANDOMMISS;
          --random_checkCnt <= to_unsigned(5, random_checkCnt'length);
          
          if (TLB_Req = '1') then
@@ -84,12 +89,14 @@ begin
                random_counter <= random_counter + 1;
             end if;
          end if;
+         
+         TLB_ClearEna  <= '0';
       
          if (ce = '1') then
             TLB_UnStall   <= '0';
             TLB_fetchReq  <= '0';
-            TLB_ExcRead  <= '0';
-            TLB_ExcMiss  <= '0';
+            TLB_ExcRead   <= '0';
+            TLB_ExcMiss   <= '0';
          end if;
          
          if (reset = '1') then
@@ -116,6 +123,7 @@ begin
                         state            <= EXCEPTION;
                         TLB_ExcRead      <= '1';
                         TLB_ExcMiss      <= '1';
+                        TLB_ClearEna     <= '1';
                      else
                         state            <= REQUEST;
                         TLB_fetchReq     <= '1';
@@ -147,6 +155,8 @@ begin
                      if (random_checkCnt = 0) then
                         mini_random <= '0';
                      end if;
+                     
+                     TLB_ClearIndex <= TLB_fetchSource;
                      
                   end if;
             
