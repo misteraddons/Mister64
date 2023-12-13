@@ -178,10 +178,10 @@ begin
       sdram_dataRead        => sdram_dataRead, 
       
       -- pad
-      PADTYPE0              => "001",
-      PADTYPE1              => "000",
-      PADTYPE2              => "000",
-      PADTYPE3              => "000",
+      PADTYPE0              => "000",
+      PADTYPE1              => "001",
+      PADTYPE2              => "001",
+      PADTYPE3              => "001",
       MOUSETYPE             => "000",
       PADDPADSWAP           => '0',
       pad_A                 => "0000",

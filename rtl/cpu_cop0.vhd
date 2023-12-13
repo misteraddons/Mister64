@@ -331,6 +331,19 @@ begin
    
    process (all)
    begin
+   
+      irqTrigger <= '0';
+      if (COP0_12_SR_interruptEnable = '1' and COP0_12_SR_exceptionLevel = '0' and COP0_12_SR_errorLevel = '0' and writeEnable = '0') then
+         if ((COP0_12_SR_interruptMask and COP0_13_CAUSE_interruptPending) > 0) then
+            irqTrigger <= '1';
+         end if;
+      end if;
+            
+   end process;
+   
+   
+   process (all)
+   begin
       
       readValue <= (others => '0');
    
@@ -447,6 +460,7 @@ begin
       variable mode        : unsigned(1 downto 0); 
       variable nextEPC     : unsigned(63 downto 0);
       variable excAddr     : unsigned(63 downto 0);   
+      variable excAddrWE   : std_logic;   
    begin
       if (rising_edge(clk93)) then
       
@@ -578,8 +592,6 @@ begin
             cop0Written9                    <= 0;
             cop0FirstWrite9                 <= (not loading_savestate) and (not DISABLE_BOOTCOUNT_INTERN);
             
-            irqTrigger                      <= '0';
-            
             TLBState                        <= TLBIDLE;
             TLBDone                         <= '0';
             TLB_Instr_fetchReq_saved        <= '0';
@@ -591,14 +603,7 @@ begin
          
             -- interrupt
             COP0_13_CAUSE_interruptPending(2) <= irqRequest;
-            
-            irqTrigger <= '0';
-            if (COP0_12_SR_interruptEnable = '1' and COP0_12_SR_exceptionLevel = '0' and COP0_12_SR_errorLevel = '0') then
-               if ((COP0_12_SR_interruptMask and COP0_13_CAUSE_interruptPending) > 0) then
-                  irqTrigger <= '1';
-               end if;
-            end if;
-         
+
             -- count
             if (cop0Written9 = 0) then
                COP0_9_COUNT <= COP0_9_COUNT + 1;
@@ -840,13 +845,24 @@ begin
             end if;
             
             -- addr exception
-            -- todo: also add other addr exceptions?
-            if (TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1' or TLB_ExcInstrRead = '1') then
-               excAddr := TLB_Data_fetchAddrIn;
-               if (TLB_ExcInstrRead = '1') then
-                  excAddr := TLB_Instr_fetchAddrIn;
-               end if;
+            excAddrWE := '0';
+            excAddr   := TLB_dataAddrIn; -- unmodified mem address
+            
+            if (exception3 = '1' and (exceptionCode_3 = x"4" or exceptionCode_3 = x"5")) then
+               excAddrWE := '1';
+            end if;
 
+            if (TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
+               excAddrWE := '1';
+               excAddr   := TLB_Data_fetchAddrIn;
+            end if;
+            
+            if (TLB_ExcInstrRead = '1') then
+               excAddrWE := '1';
+               excAddr   := TLB_Instr_fetchAddrIn; 
+            end if;
+
+            if (excAddrWE = '1') then
                COP0_8_BADVIRTUALADDRESS       <= excAddr;
                
                COP0_10_ENTRYHI_virtualAddress <= excAddr(39 downto 13);
