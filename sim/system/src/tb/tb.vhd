@@ -19,20 +19,21 @@ end entity;
 
 architecture arch of etb is
 
-   constant clk_speed : integer := 62500000;
-   constant baud      : integer := 10000000;
- 
-   signal clk1x       : std_logic := '1';
-   signal clk93       : std_logic := '1';
-   signal clk2x       : std_logic := '1';
-   signal clkvid      : std_logic := '1';
+   constant clk_speed         : integer := 62500000;
+   constant baud              : integer := 10000000;
+                              
+   signal clk1x               : std_logic := '1';
+   signal clk93               : std_logic := '1';
+   signal clk2x               : std_logic := '1';
+   signal clkvid              : std_logic := '1';
+                              
+   signal reset               : std_logic;
+   signal pause               : std_logic := '0';
+   signal romcopy_start       : std_logic := '0';
    
-   signal reset       : std_logic;
-   signal pause       : std_logic := '0';
-   
-   signal command_in  : std_logic;
-   signal command_out : std_logic;
-   signal command_out_filter : std_logic;
+   signal command_in          : std_logic;
+   signal command_out         : std_logic;
+   signal command_out_filter  : std_logic;
    
    signal proc_bus_in : proc_bus_type;
    
@@ -80,6 +81,16 @@ begin
    clk2x <= not clk2x after 3750 ps;
    
    reset  <= not n64_on(0);
+   
+   process 
+   begin
+      wait for 1 ms;
+      wait until rising_edge(clk1x);
+      romcopy_start <= '0'; --'1';
+      wait until rising_edge(clk1x);
+      romcopy_start <= '0';
+      wait;
+   end process;
    
    -- NTSC 48.68 Mhz - 773.5 * 263 - 3094 clock cycles per line (VI_H_SYNC), 526/525 half lines (VI_V_SYNC)
    clkvid <= not clkvid after 10271 ps;
@@ -168,6 +179,9 @@ begin
       
       -- ROM+SRAM+FLASH
       cartAvailable         => '1',
+      romcopy_start         => romcopy_start,
+      romcopy_size          => 27x"100000", -- 1 mbyte
+      
       sdram_ena             => sdram_ena,      
       sdram_rnw             => sdram_rnw,     
       sdram_Adr             => sdram_Adr,      

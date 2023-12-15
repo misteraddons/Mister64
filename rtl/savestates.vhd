@@ -47,6 +47,11 @@ entity savestates is
             
       loading_savestate       : out std_logic := '0';
       saving_savestate        : out std_logic := '0';
+      
+      romcopy_start           : in  std_logic;
+      romcopy_size            : in  unsigned(26 downto 0);
+      romcopy_nearFull        : in  std_logic;
+      romcopy_active          : out std_logic := '0';
                    
       rdram_request           : out std_logic := '0';
       rdram_rnw               : out std_logic := '0'; 
@@ -92,6 +97,10 @@ architecture arch of savestates is
    type tstate is
    (
       IDLE,
+      
+      ROMCOPY_REQUEST,
+      ROMCOPY_READ,
+      
       WAITPAUSE,
       WAITIDLE,
       SAVE_WAITSETTLE,
@@ -126,7 +135,7 @@ architecture arch of savestates is
    signal unstallwait         : integer range 0 to 67108863 := 0;
    
    --signal SS_DataRead         : std_logic_vector(63 downto 0);
-   signal RAMAddrNext         : unsigned(20 downto 0) := (others => '0');
+   signal RAMAddrNext         : unsigned(24 downto 0) := (others => '0');
    
    signal header_amount       : unsigned(31 downto 0) := to_unsigned(1, 32);
    
@@ -138,6 +147,8 @@ architecture arch of savestates is
    signal reset_intern        : std_logic := '0';
    
    signal rdram_address_safe  : unsigned(27 downto 0):= (others => '0');
+   
+   signal romcopy_latched     : std_logic := '0';
 
 begin 
 
@@ -197,12 +208,28 @@ begin
          --   when others => SS_DataRead <= (others => '0');
          --end case;
          
+         if (romcopy_start = '1') then
+            romcopy_latched <= '1';
+         end if;
+         
          case state is
          
             when IDLE =>
                savestate_pause   <= '0';
                unstallwait       <= 1023;
-               if (reset_in = '1') then
+               if (romcopy_latched = '1') then
+                  romcopy_latched   <= '0';
+                  romcopy_active    <= '1';
+                  state             <= ROMCOPY_REQUEST;
+                  RAMAddrNext       <= 25x"400000";
+                  reset_intern      <= '1';
+                  ss_reset_1x       <= '1';
+                  resetMode         <= '1';
+                  savemode          <= '0';
+                  savetype_counter  <= 12;
+                  settle            <= 0;
+                  savestate_pause   <= '1';
+               elsif (reset_in = '1') then
                   state                <= WAITPAUSE;
                   reset_intern         <= '1';
                   ss_reset_1x          <= '1';
@@ -225,6 +252,30 @@ begin
                   savetype_counter     <= 0;
                   settle               <= 0;
                end if;
+               
+-- #########################################################
+               
+            when ROMCOPY_REQUEST =>
+               if (settle < SETTLECOUNT) then
+                  settle <= settle + 1;
+               elsif (RAMAddrNext >= (romcopy_size(26 downto 3) + 16#400000#)) then
+                  romcopy_active    <= '0';
+                  state             <= WAITPAUSE;
+                  settle            <= 0;
+               elsif (romcopy_nearFull = '0') then
+                  state             <= ROMCOPY_READ;
+                  rdram_request     <= '1';
+                  rdram_rnw         <= '1';
+                  rdram_address     <= RAMAddrNext & "000";
+               end if;
+            
+            when ROMCOPY_READ =>
+               if (rdram_done = '1') then
+                  state       <= ROMCOPY_REQUEST;
+                  RAMAddrNext <= RAMAddrNext + 1;
+               end if;
+            
+-- #########################################################            
             
             when WAITPAUSE =>
                if (settle < 8) then
@@ -497,7 +548,7 @@ begin
                      SS_DataWrite     <= rdram_dataRead;
                      rdram_dataWrite  <= rdram_dataRead;
                   end if;
-                  rdram_address  <= "0000" & RAMAddrNext & "000";
+                  rdram_address  <= RAMAddrNext & "000";
                   rdram_rnw      <= '0';
                   RAMAddrNext    <= RAMAddrNext + 1;
                   SS_Adr         <= RAMAddrNext(11 downto 0);
@@ -564,7 +615,9 @@ begin
          
          reset_in_1 <= reset_in;
          if (reset_in = '1' and reset_in_1 = '0') then
-            state    <= IDLE;
+            if (state /= ROMCOPY_REQUEST and state /= ROMCOPY_READ) then
+               state    <= IDLE;
+            end if;
          end if;
          
       end if;

@@ -74,6 +74,11 @@ entity SDRamMux is
       sdramMux_done        : out tSDRAMSingle;
       sdramMux_dataRead    : out std_logic_vector(31 downto 0);
       
+      romcopy_dataNew      : in  std_logic;
+      romcopy_dataRead     : in  std_logic_vector(63 downto 0);
+      romcopy_active       : in  std_logic;
+      romcopy_nearFull     : out std_logic;
+      
       rdp9fifo_Din         : in  std_logic_vector(53 downto 0); -- 32bit data + 18 bit address + 4bit byte enable
       rdp9fifo_Wr          : in  std_logic;  
       rdp9fifo_nearfull    : out std_logic;  
@@ -95,7 +100,8 @@ architecture arch of SDRamMux is
       WAITWRITE,
       WAITFIFOWRITE,
       RESETBIT9,
-      WAITWRITERESET
+      WAITWRITERESET,
+      ROMCOPY
    );
    signal state            : tstate := IDLE;
       
@@ -115,6 +121,15 @@ architecture arch of SDRamMux is
    -- rdp fifo Z Buffer
    signal rdpfifoZ_Dout    : std_logic_vector(49 downto 0);
    signal rdpfifoZ_Rd      : std_logic := '0'; 
+   
+   -- romcopy fifo
+   signal romcopy_busy        : std_logic := '0';
+   signal romcopy_next        : std_logic := '0';
+   signal romcopyfifo_wr      : std_logic := '0';
+   signal romcopyfifo_rd      : std_logic := '0';
+   signal romcopyfifo_empty   : std_logic;
+   signal romcopyfifo_din     : std_logic_vector(31 downto 0);
+   signal romcopyfifo_dout    : std_logic_vector(31 downto 0);
 
 begin 
 
@@ -145,6 +160,8 @@ begin
          sdram_ena         <= '0';
          rdpfifo_rd        <= '0';
          rdpfifoZ_rd       <= '0';
+         romcopyfifo_wr    <= '0';
+         romcopyfifo_rd    <= '0';
          sdramMux_granted  <= (others => '0');
 
          -- request handling
@@ -172,7 +189,14 @@ begin
                lastIndex    <= activeIndex;
                timeoutCount <= (others => '0');
                
-               if (ss_reset_latched = '1') then
+               if (romcopy_active = '1') then
+               
+                  state     <= ROMCOPY;
+                  sdram_Adr <= 27x"1000000";
+                  sdram_rnw <= '0';
+                  sdram_be  <= x"F";  
+               
+               elsif (ss_reset_latched = '1') then
             
                   state            <= RESETBIT9;
                   if (FASTSIM = '1') then
@@ -266,6 +290,33 @@ begin
                      ss_reset_latched <= '0';
                   end if;
                end if;
+               
+            when ROMCOPY =>
+               if (romcopy_dataNew = '1') then
+                  romcopyfifo_wr  <= '1';
+                  romcopyfifo_din <= romcopy_dataRead(31 downto 0);
+                  romcopy_next    <= '1';
+               elsif (romcopy_next = '1') then
+                  romcopy_next    <= '0';
+                  romcopyfifo_wr  <= '1';
+                  romcopyfifo_din <= romcopy_dataRead(63 downto 32);
+               end if;
+               
+               if (romcopy_busy = '0' and romcopyfifo_empty = '0') then
+                  romcopy_busy     <= '1';
+                  romcopyfifo_rd   <= '1';
+                  sdram_ena        <= '1';
+                  sdram_dataWrite  <= romcopyfifo_dout;     
+               end if;
+               
+               if (romcopy_busy = '1' and sdram_done = '1') then
+                  romcopy_busy <= '0';
+                  sdram_Adr    <= std_logic_vector(unsigned(sdram_Adr) + 4);
+               end if;
+               
+               if (romcopy_busy = '0' and romcopy_active = '0' and romcopyfifo_empty = '1') then
+                  state <= IDLE;
+               end if;
 
          end case;
 
@@ -312,6 +363,25 @@ begin
       Empty    => rdp9fifoZ_empty   
    );
 
+   iROMCOPYFifo: entity mem.SyncFifoFallThrough
+   generic map
+   (
+      SIZE             => 32,
+      DATAWIDTH        => 32,
+      NEARFULLDISTANCE => 24
+   )
+   port map
+   ( 
+      clk      => clk1x,
+      reset    => '0',  
+      Din      => romcopyfifo_din,     
+      Wr       => romcopyfifo_wr,
+      Full     => open,    
+      NearFull => romcopy_nearFull,
+      Dout     => romcopyfifo_dout,    
+      Rd       => romcopyfifo_rd,      
+      Empty    => romcopyfifo_empty   
+   );
    
    
 end architecture;

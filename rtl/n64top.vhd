@@ -81,6 +81,9 @@ entity n64top is
    
       -- ROM+SRAM+FLASH 
       cartAvailable           : in  std_logic;
+      romcopy_start           : in  std_logic;
+      romcopy_size            : in  unsigned(26 downto 0);
+      
       sdram_ena               : out std_logic;
       sdram_rnw               : out std_logic;
       sdram_Adr               : out std_logic_vector(26 downto 0);
@@ -458,6 +461,9 @@ architecture arch of n64top is
    signal savestate_loadstate    : std_logic; 
    signal savestate_address      : integer; 
    signal savestate_busy         : std_logic; 
+   
+   signal romcopy_nearFull       : std_logic;
+   signal romcopy_active         : std_logic := '0';
    
    -- save rams
    signal eeprom_addr            : std_logic_vector(8 downto 0);
@@ -1272,6 +1278,11 @@ begin
       sdramMux_granted     => sdramMux_granted,   
       sdramMux_done        => sdramMux_done,      
       sdramMux_dataRead    => sdramMux_dataRead,
+      
+      romcopy_dataNew      => rdram_done(DDR3MUX_SS),   
+      romcopy_dataRead     => rdram_dataRead,         
+      romcopy_active       => romcopy_active,  
+      romcopy_nearFull     => romcopy_nearFull,
  
       rdp9fifo_Din         => rdp9fifo_Din,     
       rdp9fifo_Wr          => rdp9fifo_Wr,      
@@ -1502,6 +1513,11 @@ begin
 
       loading_savestate       => loading_savestate,
       saving_savestate        => open,
+      
+      romcopy_start           => romcopy_start,   
+      romcopy_size            => romcopy_size,    
+      romcopy_nearFull        => romcopy_nearFull,
+      romcopy_active          => romcopy_active,  
             
       rdram_request           => rdram_request(DDR3MUX_SS),   
       rdram_rnw               => rdram_rnw(DDR3MUX_SS),       

@@ -357,7 +357,7 @@ always @(posedge CLK_50M) begin : cfg_block
 	end
 end
 
-wire reset_or = RESET | buttons[1] | status[0] | cartN64_download;
+wire reset_or = RESET | buttons[1] | status[0];
 
 ////////////////////////////  HPS I/O  //////////////////////////////////
 
@@ -370,7 +370,7 @@ wire reset_or = RESET | buttons[1] | status[0] | cartN64_download;
 `include "build_id.v"
 parameter CONF_STR = {
 	"N64;SS3C000000:1000000;",
-   "FS1,N64z64n64v64,Load;",
+   "FS1,N64z64n64v64,Load,32000000;",
    "F2,GBCGB ,Load GB-Transfer;",
    "-;",
 	"R[40],Reload Backup RAM;",
@@ -490,6 +490,7 @@ wire [15:0] status_menumask = {15'd0, status[82]};
 wire DIRECT_VIDEO;
 
 wire        ioctl_download;
+reg         ioctl_download_1;
 wire [26:0] ioctl_addr;
 wire [15:0] ioctl_dout;
 wire        ioctl_wr;
@@ -604,6 +605,9 @@ end
 
 ////////////////////////////  SDRAM  ///////////////////////////////////
 
+reg [26:0] romcopy_size;
+reg        romcopy_start = 0;
+
 reg [26:0] ramdownload_wraddr;
 reg [31:0] ramdownload_wrdata;
 reg        ramdownload_wr;
@@ -619,21 +623,18 @@ always @(posedge clk_1x) begin
 
    cartN64_download     <= ioctl_download & (ioctl_index[5:0] == 1);
    cartGB_download      <= ioctl_download & (ioctl_index[5:0] == 2);
+   
+   ioctl_download_1 <= ioctl_download;
+
+   romcopy_start <= 0;
+   if (~ioctl_download && ioctl_download_1 && ioctl_index[5:0] == 1) begin
+      romcopy_size    <= ioctl_addr;
+      romcopy_start   <= 1;
+   end
 
 	ramdownload_wr <= 0;
 	if(cartN64_download) begin
       cart_loaded <= 1;
-      if (ioctl_wr) begin
-         if(~ioctl_addr[1]) begin
-            ramdownload_wrdata[15:0] <= ioctl_dout;
-            ramdownload_wraddr       <= ioctl_addr[26:0] + CARTN64_START[26:0];                                  
-         end else begin
-            ramdownload_wrdata[31:16] <= ioctl_dout;
-            ramdownload_wr            <= 1;
-            ioctl_wait                <= 1;
-         end
-      end
-      if(ramdownload_ready) ioctl_wait <= 0;
    end else if(cartGB_download) begin
       if (ioctl_wr) begin
          if(~ioctl_addr[1]) begin
@@ -830,6 +831,9 @@ n64top
                       
    // ROM+SRAM+FLASH  
    .cartAvailable     (cart_loaded       ),
+   .romcopy_start     (romcopy_start     ),
+   .romcopy_size      (romcopy_size      ),
+   
    .sdram_ena         (sdram_ena         ),
    .sdram_rnw         (sdram_rnw         ),
    .sdram_Adr         (sdram_Adr         ),

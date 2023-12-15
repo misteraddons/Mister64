@@ -153,6 +153,7 @@ begin
                DDRAM_DOUT_READY <= '1';
                wait until rising_edge(DDRAM_CLK);
             end loop;
+            --report "data = " & integer'image(to_integer(unsigned(DDRAM_DOUT(31 downto 0))));
             DDRAM_DOUT_READY <= '0';
          end if;  
          
@@ -203,7 +204,7 @@ begin
          
             targetpos := COMMAND_FILE_TARGET;
             
-            --report "written to " & integer'image(targetpos);
+            report "written to " & integer'image(targetpos);
          
             for i in 1 to (COMMAND_FILE_OFFSET / 4) loop
                read(infile, next_vector, actual_len); 
@@ -225,13 +226,17 @@ begin
                else
                   data(targetpos) := to_integer(signed(read_byte0 & read_byte1 & read_byte2 & read_byte3));
                end if;
+                              
+               --if (loadcount = 0) then
+               --    report "First DWORD = " & integer'image(data(targetpos));
+               --end if;
                
                targetpos       := targetpos + 1;
                loadcount       := loadcount + 4;
                
             end loop;
             
-            --report "bytes loaded " & integer'image(loadcount);
+            report "bytes loaded " & integer'image(loadcount);
          
             file_close(infile);
          
