@@ -9,6 +9,7 @@ use work.pFunctions.all;
 entity cpu_instrcache is
    port 
    (
+      clk1x             : in  std_logic;
       clk93             : in  std_logic;
       clk2x             : in  std_logic;
       reset_93          : in  std_logic;
@@ -55,11 +56,14 @@ architecture arch of cpu_instrcache is
    signal tag_address_b2   : std_logic_vector(8 downto 0);
    signal tag_q_b1         : std_logic_vector(20 downto 0);
    signal tag_q_b2         : std_logic_vector(20 downto 0);
+   signal fill_addrTag_sav : unsigned(13 downto 0) := (others => '0');
 
    signal read_hit1        : std_logic;
    signal read_hit2        : std_logic;
 
    -- data
+   signal fill_addrTag_1x  : unsigned(8 downto 0) := (others => '0');
+   signal fill_addrTag_2x  : unsigned(8 downto 0) := (others => '0');
    signal ram_grant_2x     : std_logic := '0';
    signal cache_addr_a     : unsigned(10 downto 0) := (others => '0');
    signal cache_wr_a       : std_logic;
@@ -125,16 +129,25 @@ begin
 
    --------- data
    
+   process (clk1x)
+   begin
+      if rising_edge(clk1x) then
+         fill_addrTag_1x <= fill_addrTag_sav(13 downto 5);
+      end if;
+   end process;
+   
    process (clk2x)
    begin
       if rising_edge(clk2x) then
+      
+         fill_addrTag_2x <= fill_addrTag_1x;
       
          if (ram_grant = '1'and ram_active = '1') then
             ram_grant_2x <= '1';
          end if;
          
          if (ram_grant = '1') then
-            cache_addr_a <= fill_addrTag(13 downto 5) & "00";
+            cache_addr_a <= fill_addrTag_2x & "00";
          elsif (ddr3_DOUT_READY = '1') then
             cache_addr_a <= cache_addr_a + 1;
             if (ram_grant_2x = '1' and cache_addr_a(1 downto 0) = "11") then
@@ -170,7 +183,7 @@ begin
       q_b         => cache_q_b
    );
    
-   cache_address_b <= std_logic_vector(fill_addrTag(13 downto 2))  when (state /= IDLE) else
+   cache_address_b <= std_logic_vector(fill_addrTag_sav(13 downto 2))  when (state /= IDLE) else
                       std_logic_vector(read_addr2(13 downto 2)) when (read_select = '1') else
                       std_logic_vector(read_addr1(13 downto 2));
    
@@ -199,6 +212,7 @@ begin
             case(state) is
             
                when IDLE =>
+                  fill_addrTag_sav <= fill_addrTag(13 downto 0);
                   if (CacheCommandEna = '1' and (CacheCommand = 5x"00" or CacheCommand = 5x"10")) then
                      -- HACK!
                      -- todo: should only clear if tag matches
@@ -228,7 +242,7 @@ begin
                      state          <= IDLE;
                      tag_wren_a     <= '1';
                      tag_data_a     <= '1' & std_logic_vector(fill_addrData(31 downto 12));
-                     tag_address_a  <= std_logic_vector(fill_addrTag(13 downto 5));
+                     tag_address_a  <= std_logic_vector(fill_addrTag_sav(13 downto 5));
                      fill_done      <= '1'; 
                   end if;
                   

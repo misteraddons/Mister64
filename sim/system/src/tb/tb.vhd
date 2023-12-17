@@ -238,7 +238,6 @@ begin
       -- saves              
       SAVETYPE              => "011",
       CONTROLLERPAK         => '1',
-      CPAKFORMAT            => '0',
       TRANSFERPAK           => '0',
       
       save                  => '0', 

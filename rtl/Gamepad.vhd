@@ -15,7 +15,6 @@ entity Gamepad is
       PADTYPE              : in  std_logic_vector(2 downto 0); -- 000 = normal, 001 = empty, 010 = cpak, 011 = rumble, 100 = snac, 101 = transfer pak
       MOUSETYPE            : in  std_logic_vector(2 downto 0); -- 00 - mouse off, 001 : ABZ, 010: ZAB, 011: ZBA
       PADDPADSWAP          : in  std_logic;
-      CPAKFORMAT           : in  std_logic;
       
       command_start        : in  std_logic;                    -- high for 1 clock cycle when a new command is issued from PIF. toPad_ena will also be high, sending the first byte with data containing the command ID 
       command_padindex     : in  unsigned(1 downto 0);         -- pad number 0..3
@@ -147,16 +146,6 @@ architecture arch of Gamepad is
    signal pakcrc_value              : std_logic_vector(7 downto 0);
    signal pakcrc_last               : std_logic;
    
-   type tCPAKINITState is
-   (
-      PAKINIT_IDLE,
-      PAKINIT_WRITESDRAM,
-      PAKINIT_WAITSDRAM
-   );
-   signal PAKINITState              : tCPAKINITState := PAKINIT_IDLE;
-   signal pakinit_addr              : unsigned(14 downto 0) := (others => '0');
-   signal pakinit_data              : std_logic_vector(31 downto 0);
-   
    -- tpak
    signal trigger_tpak_read         : std_logic;
    signal trigger_tpak_write        : std_logic;
@@ -217,15 +206,7 @@ begin
    end process;
               
    slowNextByteEna <= '1' when (slowcnt = 1986) else '0';
-           
-   ipif_cpakinit : entity work.pif_cpakinit
-   port map
-   (
-      clk       => clk1x,
-      address   => std_logic_vector(pakinit_addr(7 downto 0)),
-      data      => pakinit_data
-   );
-   
+
    sdram_burstcount <= x"01";
    
    
@@ -286,42 +267,6 @@ begin
 
          mouseAccX <= newMouseAccClippedX;
          mouseAccY <= newMouseAccClippedY;
-         
-         -- init PAK area
-         case (PAKINITState) is      
-               
-            when PAKINIT_IDLE => null;
-               if (second_ena = '1' and INITDONE = '0') then
-                  INITDONE     <= '1';
-                  PAKINITState <= PAKINIT_WRITESDRAM;
-               end if;
-               if (CPAKFORMAT = '1') then
-                  PAKINITState <= PAKINIT_WRITESDRAM;
-                  pakinit_addr <= (others => '0');
-               end if;
-            
-            when PAKINIT_WRITESDRAM =>
-               PAKINITState    <= PAKINIT_WAITSDRAM;
-               sdram_request   <= '1';
-               sdram_rnw       <= '0';
-               sdram_writeMask <= "1111";
-               sdram_address   <= resize(unsigned(pakinit_addr & "00"), 27) + to_unsigned(16#500000#, 27);
-               if (pakinit_addr(12 downto 0) < 256) then
-                  sdram_dataWrite <= byteswap32(pakinit_data);
-               else
-                  sdram_dataWrite <= (others => '0');
-               end if;
-               pakinit_addr    <= pakinit_addr + 1;
-               if (pakinit_addr = 15x"7FFF") then
-                  PAKINITState <= PAKINIT_IDLE;
-               end if;
-
-            when PAKINIT_WAITSDRAM =>
-               if (sdram_done = '1') then
-                  PAKINITState <= PAKINIT_WRITESDRAM;
-               end if;
-               
-         end case;
          
          if (PADTYPE /= "011" and command_padindex = "00") then rumble(0) <= '0'; end if;
          if (PADTYPE /= "011" and command_padindex = "01") then rumble(1) <= '0'; end if;

@@ -419,7 +419,6 @@ parameter CONF_STR = {
    "P2O[80:79],System Type,NTSC,PAL;",
 	"P2O[68:65],CIC,6101,6102,7101,7102,6103,7103,6105,7105,6106,7106,8303,8401,5167,DDUS,5101;",
    "P2O[71],ControllerPak,Off,On;",
-   "P2R[81],Format CPAK now;",
    "P2O[72],RumblePak,Off,On;",
    "P2O[73],TransferPak,Off,On;",
    "P2O[74],RTC,Off,On;",
@@ -901,7 +900,6 @@ n64top
    // Saves
    .SAVETYPE         (status[77:75]),
    .CONTROLLERPAK    (status[71]),
-   .CPAKFORMAT       (status[81]),
    .TRANSFERPAK      (status[73]),
    
    .save             (bk_save),

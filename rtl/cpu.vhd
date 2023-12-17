@@ -1004,6 +1004,7 @@ begin
    icpu_instrcache : entity work.cpu_instrcache
    port map
    (
+      clk1x             => clk1x,
       clk93             => clk93,
       clk2x             => clk2x,
       reset_93          => reset_93,
@@ -2719,6 +2720,7 @@ begin
    icpu_datacache : entity work.cpu_datacache
    port map
    (
+      clk1x             => clk1x,
       clk93             => clk93,
       clk2x             => clk2x,
       reset_93          => reset_93,

@@ -9,6 +9,7 @@ use work.pFunctions.all;
 entity cpu_datacache is
    port 
    (
+      clk1x             : in  std_logic;
       clk93             : in  std_logic;
       clk2x             : in  std_logic;
       reset_93          : in  std_logic;
@@ -80,6 +81,9 @@ architecture arch of cpu_datacache is
    signal fillAddr         : unsigned(31 downto 0) := (others => '0');
 
    -- data
+   signal tag_read_addr_1x : unsigned(8 downto 0) := (others => '0');
+   signal tag_read_addr_2x : unsigned(8 downto 0) := (others => '0');
+   
    signal ram_grant_2x     : std_logic := '0';
    signal cache_addr_a     : unsigned(9 downto 0) := (others => '0');
    signal cache_wr_a       : std_logic;
@@ -196,16 +200,25 @@ begin
   
    --------- data
    
+   process (clk1x)
+   begin
+      if rising_edge(clk1x) then
+         tag_read_addr_1x <= tag_read_addr(12 downto 4);
+      end if;
+   end process;
+   
    process (clk2x)
    begin
       if rising_edge(clk2x) then
+      
+         tag_read_addr_2x <= tag_read_addr_1x;
       
          if (ram_grant = '1'and ram_active = '1') then
             ram_grant_2x <= '1';
          end if;
          
          if (ram_grant = '1') then
-            cache_addr_a <= tag_read_addr(12 downto 4) & "0";
+            cache_addr_a <= tag_read_addr_2x & "0";
          elsif (ddr3_DOUT_READY = '1') then
             cache_addr_a <= cache_addr_a + 1;
             if (ram_grant_2x = '1' and cache_addr_a(0) = '1') then

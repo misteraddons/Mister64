@@ -152,7 +152,6 @@ entity n64top is
       -- save
       SAVETYPE                : in  std_logic_vector(2 downto 0); -- 0 -> None, 1 -> EEPROM4, 2 -> EEPROM16, 3 -> SRAM32, 4 -> SRAM96, 5 -> Flash
       CONTROLLERPAK           : in  std_logic;
-      CPAKFORMAT              : in  std_logic;
       TRANSFERPAK             : in  std_logic;
       
       save                    : in  std_logic;
@@ -1120,7 +1119,6 @@ begin
       PADTYPE              => PADTYPE_latched,
       MOUSETYPE            => MOUSETYPE,
       PADDPADSWAP          => PADDPADSWAP,
-      CPAKFORMAT           => CPAKFORMAT,
       
       command_start        => command_startUSB,     
       command_padindex     => command_padindexUSB,  
