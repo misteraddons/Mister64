@@ -219,105 +219,16 @@ pll2 pll2
 wire [63:0] reconfig_to_pll;
 wire [63:0] reconfig_from_pll;
 
-// the following code does copy bootup and switch behavior of the pll cfg(both match 100%, checked via signaltap), 
-// but the clock does not switch so there must be more actions going on between those two instances
-// most likely something after bootup, but not instantly
-
-// PAL
-// 0000000510000002h - state 0
-// 000000051C00017Ah - state 1
-// 0000000510000002h - state 2
-// 0000000510000002h - state 3
-// 000000051C200002h - state 4
-// 000000051C000176h - state 5
-// 000000051CEC3986h - state 6
-// 000000051FBF7D96h - state 7
-// 000000051C200176h - state 8
-// 0000000510000002h - state 9
-
-// NTSC
-// 0000000510000002h - state 0
-// 000000051C00017Ah - state 1
-// 0000000510000002h - state 2
-// 0000000510000002h - state 3
-// 000000051C200002h - state 4
-// 000000051C000176h - state 5
-// 000000051E949586h - state 6
-// 000000051F0CB196h - state 7
-// 000000051C200176h - state 8
-// 0000000510000002h - state 9
-
-//reg [63:0] reconfig_to_pll = 64'h000000053C000000;
-
-//always @(posedge CLK_50M) begin : cfg_block
-//	reg pald = 0, pald2 = 0;
-//	reg [3:0] state = 0;
-//   
-//   reg [3:0] resetstate = 0;
-//   reg [5:0] initCnt = 0;
-//   reg [9:0] resetCnt = 0; 
-//
-//	pald  <= status[79];
-//	pald2 <= pald;
-//	if(pald2 != pald) state <= 1;
-//   
-//   if (!resetstate[3]) begin
-//   
-//      case(resetstate[2:0])
-//         0: begin
-//            resetCnt <= resetCnt + 1'd1;
-//               if (resetCnt == 9'd340) begin
-//                  resetstate      <= resetstate + 1'd1;
-//                  reconfig_to_pll <= 64'h000000053C000006;
-//               end
-//            end
-//         1: begin resetstate <= resetstate + 1'd1; end
-//         2: begin
-//               reconfig_to_pll[9:4] <= initCnt;
-//               initCnt <= initCnt + 1'd1;
-//               if (initCnt == 6'h3F) begin
-//                  resetstate <= resetstate + 1'd1;
-//               end 
-//            end
-//         3: begin reconfig_to_pll <= 64'h000000053C000002; resetstate <= resetstate + 1'd1; end 
-//         4: begin reconfig_to_pll <= 64'h000000052C000002; resetstate <= resetstate + 1'd1; end 
-//         5: begin resetstate  <= resetstate + 1'd1; end 
-//         6: begin reconfig_to_pll <= 64'h000000053C000002; resetstate <= resetstate + 1'd1; end 
-//         7: begin resetstate  <= resetstate + 1'd1; end 
-//      endcase
-//   
-//   end else begin
-//   
-//      reconfig_to_pll <= 64'h0000000510000002;
-//   
-//      if(state) state<=state+1'd1;
-//      case(state)
-//         1: reconfig_to_pll <= 64'h000000051C00017A;
-//         2: reconfig_to_pll <= 64'h0000000510000002;
-//         3: reconfig_to_pll <= 64'h0000000510000002;
-//         4: reconfig_to_pll <= 64'h000000051C200002;
-//         5: reconfig_to_pll <= 64'h000000051C000176;
-//         6: reconfig_to_pll <= pald2 ? 64'h000000051CEC3986 : 64'h000000051E949586;
-//         7: reconfig_to_pll <= pald2 ? 64'h000000051FBF7D96 : 64'h000000051F0CB196;
-//         8: reconfig_to_pll <= 64'h000000051C200176;
-//         9: reconfig_to_pll <= 64'h0000000510000002;
-//      endcase
-//      
-//   end
-//end
-
 wire        cfg_waitrequest;
 reg         cfg_write;
 reg   [5:0] cfg_address;
 reg  [31:0] cfg_data;
 
-pll_cfg pll_cfg
+pll_cfg_small pll_cfg_small
 (
 	.mgmt_clk(CLK_50M),
 	.mgmt_reset(0),
 	.mgmt_waitrequest(cfg_waitrequest),
-	.mgmt_read(0),
-	.mgmt_readdata(),
 	.mgmt_write(cfg_write),
 	.mgmt_address(cfg_address),
 	.mgmt_writedata(cfg_data),
@@ -418,6 +329,7 @@ parameter CONF_STR = {
    "P2O[70],RAM size,8MByte,4MByte;",
    "P2O[80:79],System Type,NTSC,PAL;",
 	"P2O[68:65],CIC,6101,6102,7101,7102,6103,7103,6105,7105,6106,7106,8303,8401,5167,DDUS,5101;",
+   "P2O[81],Auto Setup Pak Type,On,Off;",
    "P2O[71],ControllerPak,Off,On;",
    "P2O[72],RumblePak,Off,On;",
    "P2O[73],TransferPak,Off,On;",
