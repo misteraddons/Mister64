@@ -49,7 +49,7 @@ module pll_cfg_hdmi
     //localparam VCO_REG              = 6'b011100; // unused
     
     //C Counters
-    localparam number_of_counters = 5'd1;
+    localparam number_of_counters = 5'd6;
     //C counter addresses
     localparam C_CNT_0_DIV_ADDR = 5'h00;
     localparam C_CNT_0_DIV_ADDR_DPRIO_1 = 5'h11;
@@ -188,8 +188,6 @@ module pll_cfg_hdmi
     reg  [7:0]      usr_c_cnt_hi;
     reg             usr_c_cnt_bypass_en;
     reg             usr_c_cnt_odd_duty_div_en;
-    reg  [7:0]      temp_c_cnt_lo [0:17]; 
-    reg  [7:0]      temp_c_cnt_hi [0:17];
     reg             temp_c_cnt_bypass_en [0:17];
     reg      	    temp_c_cnt_odd_duty_div_en [0:17];
     reg             any_c_cnt_changed;
@@ -550,17 +548,19 @@ module pll_cfg_hdmi
         end 
     end
     //C Counter assigning values to the 2-d array of values for each C counter
-
+   
+    reg [4:0] j;
     always @(posedge clk)
     begin
 
         if (reset)
         begin
             c_cnt_changed[17:0] <= 0;
-            temp_c_cnt_bypass_en[0] <= 0;
-            temp_c_cnt_odd_duty_div_en[0] <= 0;
-            temp_c_cnt_lo[0][7:0] <= 0;
-            temp_c_cnt_hi[0][7:0] <= 0;
+            for (j = 0; j < number_of_counters; j = j + 1'b1)
+            begin : c_cnt_reset
+                temp_c_cnt_bypass_en[j] <= 0;
+                temp_c_cnt_odd_duty_div_en[j] <= 0;
+            end
         end
         else 
         begin
@@ -570,11 +570,9 @@ module pll_cfg_hdmi
             end
             if (any_c_cnt_changed && (operation_address == C_COUNTERS_REG))
             begin
-               temp_c_cnt_lo [0] <= usr_c_cnt_lo;
-               temp_c_cnt_hi [0] <= usr_c_cnt_hi;
-               temp_c_cnt_bypass_en [0] <= usr_c_cnt_bypass_en;
-               temp_c_cnt_odd_duty_div_en [0] <= usr_c_cnt_odd_duty_div_en;
-               c_cnt_changed [0] <= 1'b1;
+                        temp_c_cnt_bypass_en [5] <= usr_c_cnt_bypass_en;
+                        temp_c_cnt_odd_duty_div_en [5] <= usr_c_cnt_odd_duty_div_en;
+                        c_cnt_changed [5] <= 1'b1;
             end
         end
     end
@@ -655,8 +653,8 @@ module pll_cfg_hdmi
                 	    	dprio_next_state = TWO;
                                 if (fpll_1) avmm_dprio_address = C_CNT_0_DIV_ADDR + C_CNT_0_DIV_ADDR_DPRIO_1 - i;
                                 else avmm_dprio_address = C_CNT_0_DIV_ADDR + i;
-                                avmm_dprio_writedata[7:0] = temp_c_cnt_lo[i];
-                                avmm_dprio_writedata[15:8] = temp_c_cnt_hi[i];
+                                avmm_dprio_writedata[7:0] = usr_c_cnt_lo;
+                                avmm_dprio_writedata[15:8] = usr_c_cnt_hi;
                                 //To break from the loop, since only one counter
                                 //is addressed at a time
                                 break_loop = 1'b1;
@@ -719,7 +717,7 @@ module pll_cfg_hdmi
                    
                     else if (any_c_cnt_changed & !all_c_cnt_done_q)
                     begin
-                        for (i = 0; (i < number_of_counters) & !break_loop; i = i + 1'b1)
+                        for (i = 5; (i < number_of_counters) & !break_loop; i = i + 1'b1)
                         begin : c_cnt_read_bypass
                             if (fpll_1)
                             begin
@@ -807,7 +805,7 @@ module pll_cfg_hdmi
                     end
                     else if (any_c_cnt_changed & !all_c_cnt_done_q)
                     begin
-                        for (i = 0; (i < number_of_counters) & !break_loop; i = i + 1'b1)
+                        for (i = 5; (i < number_of_counters) & !break_loop; i = i + 1'b1)
                         begin : c_cnt_read_odd_div
                             if (fpll_1)
                             begin
@@ -894,7 +892,7 @@ module pll_cfg_hdmi
                     end
                     else if (any_c_cnt_changed & !all_c_cnt_done_q)
                     begin
-                        for (i = 0; (i < number_of_counters) & !break_loop; i = i + 1'b1)
+                        for (i = 5; (i < number_of_counters) & !break_loop; i = i + 1'b1)
                         begin : c_cnt_write_bypass
                             if (fpll_1)
                             begin
@@ -980,7 +978,7 @@ module pll_cfg_hdmi
                          
                     else if (any_c_cnt_changed & !all_c_cnt_done_q)
                     begin
-                        for (i = 0; (i < number_of_counters) & !break_loop; i = i + 1'b1)
+                        for (i = 5; (i < number_of_counters) & !break_loop; i = i + 1'b1)
                         begin : c_cnt_write_odd_div
                             if (fpll_1)
                             begin
