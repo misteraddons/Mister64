@@ -38,6 +38,7 @@ entity cpu_datacache is
       read_ena          : in  std_logic;
       RW_addr           : in  unsigned(31 downto 0);
       RW_64             : in  std_logic;
+      read_busy         : out std_logic;
       read_done         : out std_logic;
       read_data         : out std_logic_vector(63 downto 0) := (others => '0');
       
@@ -271,6 +272,8 @@ begin
    write_done      <=  wb_done when (force_wb = '1') else
                        '1'     when ((state = IDLE and read_hit = '1' and write_ena = '1') or (writeMode = '1' and state = FILL and ram_done = '1')) else 
                        '0';
+   
+   read_busy       <= '1' when (state = READWAIT or state = WAITSLOW or state = FILL) else '0';
    
    read_done       <= '1' when (state = IDLE and write_ena_1 = '0' and read_hit = '1' and read_ena = '1' and slow_on = '0') else
                       '1' when (state = READWAIT) else

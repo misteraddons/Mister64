@@ -604,6 +604,7 @@ architecture arch of cpu is
    signal datacache_active             : std_logic := '0';
    signal datacache_reqAddr            : unsigned(31 downto 0);
    signal datacache_readena            : std_logic;
+   signal datacache_readbusy           : std_logic;
    signal datacache_readdone           : std_logic;
    signal datacache_addr               : unsigned(31 downto 0);   
    signal datacache_data_out           : std_logic_vector(63 downto 0);   
@@ -2749,6 +2750,7 @@ begin
       read_ena          => datacache_readena,
       RW_addr           => datacache_addr,
       RW_64             => executeMem64Bit,
+      read_busy         => datacache_readbusy,
       read_done         => datacache_readdone,
       read_data         => datacache_data_out,
       
@@ -2993,7 +2995,7 @@ begin
 
                end if;
                
-            end if;
+            end if; -- stall4Masked
             
             if (datacache_CmdDone = '1') then
                stall4        <= '0';
@@ -3018,35 +3020,42 @@ begin
             
             if ((writeback_UseCache = '0' and mem_finished_read = '1') or datacache_readdone = '1') then
             
-               stall4        <= '0';
-               writebackNew  <= '1';
-               
-               cop1_stage4_data <= byteswap32(read4_dataReadData(31 downto 0)) & byteswap32(read4_dataReadData(63 downto 32));
+               stall4             <= '0';
+               writebackNew       <= '1';
                
                if (read4_cop1_readEna = '1') then
                   cop1_stage4_writeEnable <= '1';
-                  cop1_stage4_writeMask   <= "11";
-                  if (fpuRegMode = '1') then
-                     if (read4_useLoadType = LOADTYPE_DWORD) then
-                        cop1_stage4_data(31 downto 0) <= byteswap32(read4_dataReadData(31 downto 0));
-                        cop1_stage4_writeMask         <= "01";
-                     end if;
-                  else
+                  if (fpuRegMode = '0') then
                      cop1_stage4_target(0) <= '0';
-                     if (read4_useLoadType = LOADTYPE_DWORD) then
-                        if (read4_cop1_target(0) = '1') then
-                           cop1_stage4_data(63 downto 32) <= byteswap32(read4_dataReadData(31 downto 0));
-                           cop1_stage4_writeMask          <= "10";
-                        else
-                           cop1_stage4_data(31 downto 0) <= byteswap32(read4_dataReadData(31 downto 0));
-                           cop1_stage4_writeMask         <= "01";
-                        end if;
-                     end if;
                   end if;
                end if;
                
                if (read4_useTarget > 0 and read4_cop1_readEna = '0') then
                   writebackWriteEnable <= '1';
+               end if;
+               
+            end if; -- mem_finished_read
+            
+            if ((writeback_UseCache = '0' and mem_finished_read = '1') or datacache_readena = '1' or datacache_readbusy = '1') then
+               
+               cop1_stage4_data <= byteswap32(read4_dataReadData(31 downto 0)) & byteswap32(read4_dataReadData(63 downto 32));
+               
+               cop1_stage4_writeMask   <= "11";
+               if (fpuRegMode = '1') then
+                  if (read4_useLoadType = LOADTYPE_DWORD) then
+                     cop1_stage4_data(31 downto 0) <= byteswap32(read4_dataReadData(31 downto 0));
+                     cop1_stage4_writeMask         <= "01";
+                  end if;
+               else
+                  if (read4_useLoadType = LOADTYPE_DWORD) then
+                     if (read4_cop1_target(0) = '1') then
+                        cop1_stage4_data(63 downto 32) <= byteswap32(read4_dataReadData(31 downto 0));
+                        cop1_stage4_writeMask          <= "10";
+                     else
+                        cop1_stage4_data(31 downto 0) <= byteswap32(read4_dataReadData(31 downto 0));
+                        cop1_stage4_writeMask         <= "01";
+                     end if;
+                  end if;
                end if;
                
                case (read4_useLoadType) is
@@ -3105,7 +3114,7 @@ begin
                      
                end case; 
                
-            end if; -- mem_finished_read
+            end if; -- mem_read
 
          end if; -- ce
          
