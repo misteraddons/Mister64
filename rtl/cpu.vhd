@@ -636,10 +636,10 @@ architecture arch of cpu is
    signal ss_FPUregs_data              : std_logic_vector(63 downto 0);   
    
    -- debug
-   signal debugCnt                     : unsigned(31 downto 0);
-   signal debugSum                     : unsigned(31 downto 0);
-   signal debugTmr                     : unsigned(31 downto 0);
-   signal debugwrite                   : std_logic := '0';
+   --signal debugCnt                     : unsigned(31 downto 0);
+   --signal debugSum                     : unsigned(31 downto 0);
+   --signal debugTmr                     : unsigned(31 downto 0);
+   --signal debugwrite                   : std_logic := '0';
    
 -- synthesis translate_off
    signal stallcountNo                 : integer;
@@ -3134,13 +3134,13 @@ begin
          cpu_done <= '0';
 -- synthesis translate_on
          
-         debugTmr <= debugTmr + 1;
+         --debugTmr <= debugTmr + 1;
 
          if (reset_93 = '1') then
             
-            debugCnt             <= (others => '0');
-            debugSum             <= (others => '0');
-            debugTmr             <= (others => '0');
+            --debugCnt             <= (others => '0');
+            --debugSum             <= (others => '0');
+            --debugTmr             <= (others => '0');
          
          elsif (ce_93 = '1') then
             
@@ -3159,10 +3159,10 @@ begin
 -- synthesis translate_off
                      regs(to_integer(writebackTarget)) <= writebackData;
 -- synthesis translate_on
-                     debugSum <= debugSum + writebackData(31 downto 0);
+                     --debugSum <= debugSum + writebackData(31 downto 0);
                   end if;
                end if;
-               debugCnt          <= debugCnt + 1;
+               --debugCnt          <= debugCnt + 1;
 -- synthesis translate_off
 
                cpu_done          <= '1';
@@ -3182,10 +3182,10 @@ begin
                cpu_export.csr      <= 7x"0" & csr_export_2;
                
 -- synthesis translate_on
-               debugwrite <= '0';
-               if (debugCnt(31) = '1' and debugSum(31) = '1' and debugTmr(31) = '1' and writebackTarget = 0) then
-                  debugwrite <= '1';
-               end if;
+               --debugwrite <= '0';
+               --if (debugCnt(31) = '1' and debugSum(31) = '1' and debugTmr(31) = '1' and writebackTarget = 0) then
+               --   debugwrite <= '1';
+               --end if;
                
             end if;
              
@@ -3469,7 +3469,8 @@ begin
                debugStallcounter <= debugStallcounter + 1;
             end if;         
             
-            if (debugStallcounter(12) = '1' and debugwrite = '0') then
+            --if (debugStallcounter(12) = '1' and debugwrite = '0') then
+            if (debugStallcounter(12) = '1') then
                error_stall       <= '1';
             end if;
             
