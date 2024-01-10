@@ -96,6 +96,10 @@ entity RDP is
       RSP2RDP_we           : in  std_logic;
       RSP2RDP_done         : in  std_logic;
       
+      -- synthesis translate_off
+      commandIsIdle        : out std_logic;
+      -- synthesis translate_on
+      
       SS_reset             : in  std_logic;
       SS_DataWrite         : in  std_logic_vector(63 downto 0);
       SS_Adr               : in  unsigned(0 downto 0);
@@ -829,6 +833,7 @@ begin
       -- synthesis translate_off
       export_command_done     => export_command_done, 
       export_command_data     => export_command_data, 
+      commandIsIdle           => commandIsIdle,
       -- synthesis translate_on      
                               
       tile_Command            => tile_Command,         

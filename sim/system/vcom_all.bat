@@ -4,7 +4,8 @@ src/tb/globals.vhd
 
 vcom -93 -quiet -work sim/mem ^
 ../system/src/mem/dpram.vhd ^
-../system/src/mem/RamMLAB.vhd
+../system/src/mem/RamMLAB.vhd ^
+../system/src/mem/Shiftreg.vhd
 
 vcom -93 -quiet -work sim/n64 ^
 ../system/src/mem/dpram.vhd
