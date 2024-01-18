@@ -132,7 +132,7 @@ begin
             when 10 => color_mul(i) <= x"00" & signed(settings_primcolor.prim_A);
             when 11 => color_mul(i) <= 7x"00" & signed(pipeInColor(3));
             when 12 => color_mul(i) <= x"00" & signed(settings_envcolor.env_A);
-            when 13 => color_mul(i) <= 7x"00" & signed(lod_frac);
+            when 13 => color_mul(i) <= resize(signed(lod_frac), 16);
             when 14 => color_mul(i) <= x"00" & signed(settings_primcolor.prim_levelFrac);
             when 15 => color_mul(i) <= 7x"00" & signed(settings_Convert.K5);
             when others => null;

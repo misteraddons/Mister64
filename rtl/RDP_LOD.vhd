@@ -64,9 +64,9 @@ architecture arch of RDP_LOD is
 
 begin 
 
-   lodclamp <= '1' when (texture_S(18 downto 17) = 1       or texture_S(18 downto 17) = 1 or
-                         texture_S_nextX(18 downto 17) = 1 or texture_T_nextX(18 downto 17) = 1 or
-                         texture_S_nextY(18 downto 17) = 1 or texture_T_nextY(18 downto 17) = 1) else '0';
+   lodclamp <= '1' when (texture_S(18 downto 17)       /= 0 or texture_S(18 downto 17)       /= 0 or
+                         texture_S_nextX(18 downto 17) /= 0 or texture_T_nextX(18 downto 17) /= 0 or
+                         texture_S_nextY(18 downto 17) /= 0 or texture_T_nextY(18 downto 17) /= 0) else '0';
 
    -- LOD
    delta_S_X <= resize(texture_S_nextX(16 downto 0),18) - resize(texture_S(16 downto 0), 18);

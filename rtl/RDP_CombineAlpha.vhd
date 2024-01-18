@@ -96,7 +96,7 @@ begin
       
       alpha_mul <= (others => '0');
       case (to_integer(mode_mul)) is
-         when 0 => alpha_mul <= '0' & signed(lod_frac);
+         when 0 => alpha_mul <= resize(signed(lod_frac),10);
          when 1 => alpha_mul <= "00" & signed(tex_alpha);
          when 2 => alpha_mul <= "00" & signed(tex2_alpha);
          when 3 => alpha_mul <= "00" & signed(settings_primcolor.prim_A);
