@@ -1797,7 +1797,7 @@ begin
                tracecounts_out(7)  <= texfetch_count;
                tracecounts_out(13) <= texcolor_count;
                
-               export_gpu32(23, tracecounts_out(23), export_Comb    , outfile); tracecounts_out(23) <= tracecounts_out(23) + 1;
+               export_gpu64(23, tracecounts_out(23), export_Comb    , outfile); tracecounts_out(23) <= tracecounts_out(23) + 1;
                if (settings_otherModes.imageRead = '1') then
                   export_gpu32(24, tracecounts_out(24), export_FBMem   , outfile); tracecounts_out(24) <= tracecounts_out(24) + 1;
                end if;               

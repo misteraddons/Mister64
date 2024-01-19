@@ -104,6 +104,8 @@ begin
    process (all)
    begin
    
+      lodtile_shift <= (others => '0');
+   
       if (lod(14) = '1' or lodclamp = '1') then
          magnify <= '0';
          distant <= '1';

@@ -156,6 +156,7 @@ architecture arch of RDP_pipeline is
    constant STAGE_OUTPUT    : integer := 9;
    
    type t_stage_std is array(0 to STAGE_OUTPUT - 1) of std_logic;
+   type t_stage_u64 is array(0 to STAGE_OUTPUT - 1) of unsigned(63 downto 0);
    type t_stage_u32 is array(0 to STAGE_OUTPUT - 1) of unsigned(31 downto 0);
    type t_stage_u26 is array(0 to STAGE_OUTPUT - 1) of unsigned(25 downto 0);
    type t_stage_u16 is array(0 to STAGE_OUTPUT - 1) of unsigned(15 downto 0);
@@ -343,6 +344,7 @@ architecture arch of RDP_pipeline is
    signal stage2_texFt_db3    : t_stage_c32u;
    signal stage2_texFt_mode   : t_stage_u2;
    signal stage_combineC      : t_stage_c8u;
+   signal stage_combine_R     : t_stage_u64;
    signal stage_zNewRaw       : t_stage_u32;
    signal stage_zOld          : t_stage_u32;
    signal stage_dzOld         : t_stage_u16;
@@ -368,6 +370,7 @@ architecture arch of RDP_pipeline is
    signal export_zOld         : unsigned(31 downto 0);
    signal export_dzOld        : unsigned(15 downto 0);
    signal export_dzNew        : unsigned(15 downto 0);
+   signal export_Comb_R_All   : unsigned(63 downto 0);
    -- synthesis translate_on
 
 begin 
@@ -861,6 +864,7 @@ begin
             stage_combineC(STAGE_BLENDER)(1)  <= combine_color(1);
             stage_combineC(STAGE_BLENDER)(2)  <= combine_color(2);
             stage_combineC(STAGE_BLENDER)(3)  <= combine_alpha;
+            stage_combine_R(STAGE_BLENDER)    <= export_Comb_R_All;
             stage_zNewRaw(STAGE_BLENDER)      <= export_zNewRaw;
             stage_zOld(STAGE_BLENDER)         <= export_zOld;
             stage_dzOld(STAGE_BLENDER)        <= export_dzOld;
@@ -1113,7 +1117,7 @@ begin
             export2_TexColor3.debug3 <= resize(stage2_texFt_data(stage_OUTPUT - 1)(3)( 7 downto 0), 32);
                
             export_Comb.addr        <= resize(stage_combineC(STAGE_OUTPUT - 1)(3), 32);
-            export_Comb.data        <= (others => '0');
+            export_Comb.data        <= stage_combine_R(STAGE_OUTPUT - 1);
             if (settings_otherModes.cycleType = "00") then
                export_Comb.x        <= 13x"0" & stage_ditherC(STAGE_OUTPUT - 1);
                export_Comb.y        <= 13x"0" & stage_ditherA(STAGE_OUTPUT - 1);
@@ -1319,7 +1323,7 @@ begin
       export_zOld             => export_zOld,
       export_dzOld            => export_dzOld,
       export_dzNew            => export_dzNew,
-      -- synthesis translate_on
+      -- synthesis translate_on      
       
       blend_enable            => blend_enable,
       zOverflow               => zOverflow,
@@ -1483,6 +1487,10 @@ begin
       lod_frac                => stage_lod_Frac(STAGE_PALETTE),
       combine_alpha           => combine_alpha_save,
       random2                 => lfsr(1 downto 0),
+       
+      -- synthesis translate_off
+      export_Comb_R_All       => export_Comb_R_All,
+      -- synthesis translate_on
      
       combine_color           => combine_color
    );
