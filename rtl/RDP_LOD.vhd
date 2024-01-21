@@ -59,12 +59,10 @@ architecture arch of RDP_LOD is
    -- tile
    signal tile0         : unsigned(2 downto 0);
    signal tile1         : unsigned(2 downto 0);
-   signal tile1_next    : unsigned(2 downto 0);
    
-
 begin 
 
-   lodclamp <= '1' when (texture_S(18 downto 17)       /= 0 or texture_S(18 downto 17)       /= 0 or
+   lodclamp <= '1' when (texture_S(18 downto 17)       /= 0 or texture_T(18 downto 17)       /= 0 or
                          texture_S_nextX(18 downto 17) /= 0 or texture_T_nextX(18 downto 17) /= 0 or
                          texture_S_nextY(18 downto 17) /= 0 or texture_T_nextY(18 downto 17) /= 0) else '0';
 
@@ -218,16 +216,10 @@ begin
 
             lod_frac   <= lodfrac;
             tile0_out  <= tile0;
-            tile1_next <= tile1;
+            tile1_out  <= tile1;
          
          end if;         
-            
-         if (step2 = '1') then
-         
-            tile1_out <= tile1_next;
-           
-         end if;
-         
+
       end if;
    end process;
    

@@ -583,6 +583,7 @@ begin
             stage_texCoord_S(STAGE_TEXCOORD) <= texture_S_clamped;
             stage_texCoord_T(STAGE_TEXCOORD) <= texture_T_clamped;
             stage_tile0(STAGE_TEXCOORD)      <= tile0;
+            stage_tile1(STAGE_TEXCOORD)      <= tile1;
             for i in 0 to 5 loop   
                stage_persp(STAGE_TEXCOORD,i)  <= stage_persp(STAGE_LOD,i);
             end loop;
@@ -619,7 +620,7 @@ begin
             stage_texIndex_TN(STAGE_TEXFETCH) <= texture_T_indexN;
             stage_texAddr(STAGE_TEXFETCH)     <= export_TextureAddr;
             stage_tile0(STAGE_TEXFETCH)       <= stage_tile0(STAGE_TEXCOORD);   
-            stage_tile1(STAGE_TEXFETCH)       <= stage_tile1(STAGE_TEXCOORD);   
+            stage_tile1(STAGE_TEXFETCH)       <= stage_tile1(STAGE_TEXCOORD);      
             for i in 0 to 5 loop   
                stage_persp(STAGE_TEXFETCH,i)  <= stage_persp(STAGE_TEXCOORD,i);
             end loop;
@@ -1149,7 +1150,6 @@ begin
 
          -- synthesis translate_off
          if (pipeIn_trigger = '0' and step2 = '1') then -- trigger
-            stage_tile1(STAGE_TEXCOORD)        <= tile1;
             stage2_texAddr(STAGE_TEXFETCH)     <= export_TextureAddr;
             stage2_texIndex_S0(STAGE_TEXFETCH) <= texture_S_index;
             stage2_texIndex_SN(STAGE_TEXFETCH) <= texture_S_indexN;
