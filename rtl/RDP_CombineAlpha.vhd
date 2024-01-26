@@ -60,9 +60,9 @@ architecture arch of RDP_CombineAlpha is
    
    --combine2
    signal cvgmul2            : unsigned(12 downto 0);
-   signal combiner_result2   : unsigned(8 downto 0);
-   signal cvgCount2          : unsigned(3 downto 0);
-   signal ditherAlpha2       : unsigned(2 downto 0);
+   signal combiner_result2   : unsigned(8 downto 0) := (others => '0');
+   signal cvgCount2          : unsigned(3 downto 0) := (others => '0');
+   signal ditherAlpha2       : unsigned(2 downto 0) := (others => '0');
 
 begin 
 
@@ -197,7 +197,7 @@ begin
             
          if (settings_otherModes.alphaCvgSelect = '0') then
             if (settings_otherModes.key = '0') then
-               calc_alpha2 := combiner_result2 + to_integer(ditherAlpha);
+               calc_alpha2 := combiner_result2 + to_integer(ditherAlpha2);
             else
                error_combineAlpha <= '1'; -- todo: key alpha mode
             end if;
