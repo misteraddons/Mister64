@@ -260,8 +260,6 @@ begin
          addr_calcT2 <= addr_calcS2 + (addr_base(8 downto 0) & "0000");
          addr_calcT3 <= addr_calcS3 + (addr_base(8 downto 0) & "0000");
          
-         -- todo: special handling for YUV
-      
       else
       
          if (settings_tile.Tile_size = SIZE_8BIT or settings_tile.Tile_format = FORMAT_YUV) then

@@ -123,7 +123,7 @@ begin
          
          color_mul(i) <= (others => '0');
          case (to_integer(mode_mul)) is
-            when  0 => color_mul(i) <= combiner_save(i);
+            when  0 => color_mul(i) <= resize(combiner_save(i)(8 downto 0), 16);
             when  1 => color_mul(i) <= resize(signed(texture_color(i)), 16);
             when  2 => color_mul(i) <= resize(signed(texture2_color(i)), 16);
             when  3 => color_mul(i) <= x"00" & signed(primcolor(i));
