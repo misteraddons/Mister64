@@ -369,6 +369,7 @@ architecture arch of RDP_raster is
    signal TextureReqRAM_index : unsigned(4 downto 0) := (others => '0');
 
    -- comb calculation
+   signal load_length         : unsigned(11 downto 0) := (others => '0');
    signal spanAdvance         : integer range 0 to 8;
    signal memAdvance          : integer range 0 to 8;
    signal load_S_sub          : signed(15 downto 0);
@@ -1175,7 +1176,11 @@ begin
    end process;
    
    -- loading
-   loadLineDone <= '1' when (loadstate = LOADLINE and (to_integer(load_posX) + spanAdvance) > to_integer(load_endX)) else '0';
+   load_length <= load_endX - load_posX + 1;
+   
+   loadLineDone <= '1' when (loadstate = LOADLINE and (to_integer(load_posX) + spanAdvance) > to_integer(load_endX)) else 
+                   '1' when (loadstate = LOADRAM2 and (load_length = 0)) else
+                   '0';
    
    spanAdvance <= 4 when (settings_textureImage.tex_size = SIZE_16BIT and settings_loadtype /= LOADTYPE_TLUT) else
                   1 when (settings_textureImage.tex_size = SIZE_16BIT and settings_loadtype = LOADTYPE_TLUT) else
@@ -1301,6 +1306,9 @@ begin
                   TextureRAMData_1    <= TextureReqRAMData;
                   if (memAdvance /= 2 or load_MemAddr(2 downto 1) = 3) then 
                      TextureReqRAM_index <= TextureReqRAM_index + 1;
+                  end if;
+                  if (load_length = 0) then
+                     loadstate <= LOADIDLE;
                   end if;
                
                when LOADLINE =>
