@@ -216,7 +216,7 @@ begin
          
          when SIZE_16BIT =>
             case (settings_tile_1.Tile_format) is
-               when FORMAT_RGBA => 
+               when FORMAT_RGBA | FORMAT_CI => -- FORMAT_CI behaves like RGB? used like that in clayfighter first screen logo
                   tex_color_read(0) <= data16(15 downto 11) & data16(15 downto 13);
                   tex_color_read(1) <= data16(10 downto  6) & data16(10 downto  8);
                   tex_color_read(2) <= data16( 5 downto  1) & data16( 5 downto  3);
@@ -246,7 +246,6 @@ begin
                   exportNext_TexFt_db3  <= x"0000" & data16;
                   -- synthesis translate_on
                
-               when FORMAT_CI => error_texMode <= '1'; -- should not be allowed
                when FORMAT_IA =>
                   tex_color_read(0) <= data16(15 downto 8);
                   tex_color_read(1) <= data16(15 downto 8);

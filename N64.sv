@@ -180,7 +180,6 @@ assign AUDIO_MIX = status[8:7];
 assign LED_USER  = cartN64_download | cartGB_download | bk_pending;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
-assign BUTTONS   = 0;
 assign VGA_SCALER= 0;
 
 assign ADC_BUS  = 'Z;
@@ -515,7 +514,7 @@ always @(posedge clk_1x) begin
    
 end
 
-////////////////////////////  SDRAM  ///////////////////////////////////
+////////////////////////////  ROM download  ///////////////////////////////////
 
 reg [26:0] romcopy_size;
 reg        romcopy_start = 0;
@@ -564,6 +563,26 @@ always @(posedge clk_1x) begin
 	end
    
 end
+
+// Pop OSD menu if no rom has been loaded automatically
+assign BUTTONS[0] = osd_btn;
+assign BUTTONS[1] = 0;
+
+reg osd_btn = 0;
+always @(posedge clk_1x) begin : osd_block
+	integer timeout = 0;
+
+	if(!RESET) begin
+		osd_btn <= 0;
+		if(timeout < 150000000) begin
+			timeout <= timeout + 1;
+			if (timeout > 140000000)
+				osd_btn <= ~cart_loaded;
+		end
+	end
+end
+
+////////////////////////////  SDRAM  ///////////////////////////////////
 
 wire        sdram_ena;
 wire        sdram_rnw;
