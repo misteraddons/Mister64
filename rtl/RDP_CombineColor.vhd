@@ -98,8 +98,8 @@ begin
          color_sub1(i) <= (others => '0');
          case (to_integer(mode_sub1)) is
             when 0 => color_sub1(i) <= combiner_save(i);
-            when 1 => color_sub1(i) <= resize(signed(texture_color(i)), 16);
-            when 2 => color_sub1(i) <= resize(signed(texture2_color(i)), 16);
+            when 1 => if ( texture_color(i)(8 downto 7) = "11") then color_sub1(i) <= 7x"7F" & signed(texture_color(i));  else color_sub1(i) <= 7x"00" & signed(texture_color(i));  end if; 
+            when 2 => if (texture2_color(i)(8 downto 7) = "11") then color_sub1(i) <= 7x"7F" & signed(texture2_color(i)); else color_sub1(i) <= 7x"00" & signed(texture2_color(i)); end if; 
             when 3 => color_sub1(i) <= x"00" & signed(primcolor(i));
             when 4 => color_sub1(i) <= 7x"00" & signed(pipeInColor(i));
             when 5 => color_sub1(i) <= x"00" & signed(envcolor(i));
@@ -108,11 +108,13 @@ begin
             when others => null;
          end case;
          
+         
+         
          color_sub2(i) <= (others => '0');
          case (to_integer(mode_sub2)) is
             when 0 => color_sub2(i) <= combiner_save(i);
-            when 1 => color_sub2(i) <= resize(signed(texture_color(i)), 16);
-            when 2 => color_sub2(i) <= resize(signed(texture2_color(i)), 16);
+            when 1 => if ( texture_color(i)(8 downto 7) = "11") then color_sub2(i) <= 7x"7F" & signed(texture_color(i));  else color_sub2(i) <= 7x"00" & signed(texture_color(i));  end if;
+            when 2 => if (texture2_color(i)(8 downto 7) = "11") then color_sub2(i) <= 7x"7F" & signed(texture2_color(i)); else color_sub2(i) <= 7x"00" & signed(texture2_color(i)); end if;
             when 3 => color_sub2(i) <= x"00" & signed(primcolor(i));
             when 4 => color_sub2(i) <= 7x"00" & signed(pipeInColor(i));
             when 5 => color_sub2(i) <= x"00" & signed(envcolor(i));
@@ -145,8 +147,8 @@ begin
          color_add(i) <= (others => '0');
          case (to_integer(mode_add)) is
             when 0 => color_add(i) <= combiner_save(i);
-            when 1 => color_add(i) <= resize(signed(texture_color(i)), 16);
-            when 2 => color_add(i) <= resize(signed(texture2_color(i)), 16);
+            when 1 => if ( texture_color(i)(8 downto 7) = "11") then color_add(i) <= 7x"7F" & signed(texture_color(i));  else color_add(i) <= 7x"00" & signed(texture_color(i));  end if;
+            when 2 => if (texture2_color(i)(8 downto 7) = "11") then color_add(i) <= 7x"7F" & signed(texture2_color(i)); else color_add(i) <= 7x"00" & signed(texture2_color(i)); end if;
             when 3 => color_add(i) <= x"00" & signed(primcolor(i));
             when 4 => color_add(i) <= 7x"00" & signed(pipeInColor(i));
             when 5 => color_add(i) <= x"00" & signed(envcolor(i));
