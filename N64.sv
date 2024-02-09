@@ -353,6 +353,8 @@ parameter CONF_STR = {
    "P3O[14],Write Z,On,Off;",
    "P3O[15],Read Z,On,Off;",
    "P3O[1],Swap Interlaced,Off,On;",
+   "P3O[101],AI processing,On,Off;",
+   "P3O[102],AI IRQ,On,Off;",
    "P3O[91],SNAC Compare,Off,On;",
    "-;",
    
@@ -827,6 +829,8 @@ n64top
    .toPIF_dataSNAC         (toPIF_data),
 	
    // audio
+   .DISABLE_AI       (status[101]),
+   .DISABLE_AI_IRQ   (status[102]),
    .sound_out_left   (AUDIO_L),
    .sound_out_right  (AUDIO_R),  
    

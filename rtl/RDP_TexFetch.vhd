@@ -534,7 +534,7 @@ begin
    tex8_2 <= tex_in2(15 downto 8) when (pal8Index2 = '1') else tex_in2(7 downto 0); 
    tex8_3 <= tex_in3(15 downto 8) when (pal8Index3 = '1') else tex_in3(7 downto 0); 
    
-   texY   <= tex_in4(15 downto 8) when (pal8Index0_s1 = '1') else tex_in4(7 downto 0); 
+   texY   <= tex_in4(15 downto 8) when (pal8Index0 = '1') else tex_in4(7 downto 0); 
    
    iRDP_TexSingle0 : entity work.RDP_TexSingle generic map (hasYUV => '1')
    port map

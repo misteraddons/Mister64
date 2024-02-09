@@ -51,8 +51,8 @@ architecture arch of RDP_TexSingle is
    signal tex_alpha_read            : unsigned(7 downto 0);
    
    signal tex_Y                     : unsigned(7 downto 0);
-   signal tex_U                     : signed(7 downto 0);
-   signal tex_V                     : signed(7 downto 0);
+   signal tex_U                     : signed(8 downto 0);
+   signal tex_V                     : signed(8 downto 0);
    
    -- second cycle   
    signal tex_color_save            : tcolor3_u8;
@@ -62,9 +62,9 @@ architecture arch of RDP_TexSingle is
    signal tex_color_s2              : tcolor3_u8 := (others => (others => '0'));
    signal tex_alpha_s2              : unsigned(7 downto 0) := (others => '0');
    
-   signal YUV_MUL_R                 : signed(17 downto 0);
-   signal YUV_MUL_G                 : signed(17 downto 0);
-   signal YUV_MUL_B                 : signed(17 downto 0);
+   signal YUV_MUL_R                 : signed(18 downto 0);
+   signal YUV_MUL_G                 : signed(18 downto 0);
+   signal YUV_MUL_B                 : signed(18 downto 0);
    signal tex_Y_1                   : unsigned(7 downto 0);
    
    -- YUV calc
@@ -72,12 +72,17 @@ architecture arch of RDP_TexSingle is
    signal YUV_K1                    : signed(9 downto 0);
    signal YUV_K2                    : signed(9 downto 0);
    signal YUV_K3                    : signed(9 downto 0);
-   signal YUV_ADD80_R               : signed(17 downto 0);
-   signal YUV_ADD80_G               : signed(17 downto 0);
-   signal YUV_ADD80_B               : signed(17 downto 0);    
+   signal YUV_ADD80_R               : signed(18 downto 0);
+   signal YUV_ADD80_G               : signed(18 downto 0);
+   signal YUV_ADD80_B               : signed(18 downto 0);    
    signal YUV_ADDY_R                : signed(8 downto 0);
    signal YUV_ADDY_G                : signed(8 downto 0);
-   signal YUV_ADDY_B                : signed(8 downto 0);
+   signal YUV_ADDY_B                : signed(8 downto 0);   
+   
+   signal YUV_ADDY_R_next           : signed(8 downto 0) := (others => '0');
+   signal YUV_ADDY_G_next           : signed(8 downto 0) := (others => '0');
+   signal YUV_ADDY_B_next           : signed(8 downto 0) := (others => '0');
+   signal YUV_ADDY_A_next           : unsigned(7 downto 0) := (others => '0');
       
    -- synthesis translate_off 
    signal exportNext_TexFt_addr     : unsigned(31 downto 0);
@@ -113,10 +118,6 @@ begin
       exportNext_TexFt_db1  <= (others => '0');
       exportNext_TexFt_db3  <= (others => '0');
       -- synthesis translate_on
-      
-      tex_Y <= dataY;
-      tex_U <= not data16(15) & signed(data16(14 downto 8));
-      tex_V <= not data16(7)  & signed(data16( 6 downto 0));
       
       case (settings_tile_1.Tile_size) is
          
@@ -238,6 +239,9 @@ begin
                   -- synthesis translate_on
                
                when FORMAT_YUV => 
+                  tex_color_read(0) <= data16(15 downto 8);
+                  tex_color_read(1) <= data16(7 downto  0);
+                  tex_color_read(2) <= dataY;
                   -- synthesis translate_off
                   exportNext_TexFt_addr <= 24x"0" & dataY;
                   exportNext_TexFt_data(23 downto 16) <= data16(15 downto 8);
@@ -299,6 +303,10 @@ begin
             
    end process;
    
+   tex_U <= not tex_color_read(0)(7) & not tex_color_read(0)(7) & signed(tex_color_read(0)(6 downto 0)) when (settings_tile_1.Tile_format = FORMAT_YUV) else '0' & signed(tex_color_read(0));
+   tex_V <= not tex_color_read(1)(7) & not tex_color_read(1)(7) & signed(tex_color_read(1)(6 downto 0)) when (settings_tile_1.Tile_format = FORMAT_YUV) else '0' & signed(tex_color_read(1));
+   tex_Y <= tex_color_read(2);
+   
    YUV_K0 <= settings_Convert.K0 & '1';
    YUV_K1 <= settings_Convert.K1 & '1';
    YUV_K2 <= settings_Convert.K2 & '1';
@@ -316,13 +324,6 @@ begin
             
             tex_color_s1 <= tex_color_read;
             tex_alpha_s1 <= tex_alpha_read;
-            
-            if (hasYUV = '1') then
-               YUV_MUL_R <= tex_V * YUV_K0;
-               YUV_MUL_G <= (tex_V * YUV_K2) + (tex_U * YUV_K1);
-               YUV_MUL_B <= tex_U * YUV_K3;
-               tex_Y_1   <= tex_Y;
-            end if;
             
             -- synthesis translate_off
             exportNextS1_TexFt_addr <= exportNext_TexFt_addr;
@@ -347,6 +348,15 @@ begin
          
          end if;
          
+         if (hasYUV = '1') then
+            if (trigger = '1' or step2 = '1') then      
+               YUV_MUL_R <= tex_V * YUV_K0;
+               YUV_MUL_G <= (tex_V * YUV_K2) + (tex_U * YUV_K1);
+               YUV_MUL_B <= tex_U * YUV_K3;
+               tex_Y_1   <= tex_Y;
+            end if;
+         end if;
+         
       end if;
    end process;
    
@@ -357,6 +367,22 @@ begin
    YUV_ADDY_R <= YUV_ADD80_R(16 downto 8) + ('0' & signed(tex_Y_1));
    YUV_ADDY_G <= YUV_ADD80_G(16 downto 8) + ('0' & signed(tex_Y_1));
    YUV_ADDY_B <= YUV_ADD80_B(16 downto 8) + ('0' & signed(tex_Y_1));
+   
+   process (clk1x)
+   begin
+      if rising_edge(clk1x) then
+         
+         if (hasYUV = '1') then
+            if (trigger = '1' or step2 = '1') then      
+               YUV_ADDY_R_next <= YUV_ADDY_R;
+               YUV_ADDY_G_next <= YUV_ADDY_G;
+               YUV_ADDY_B_next <= YUV_ADDY_B;
+               YUV_ADDY_A_next <= tex_Y_1;
+            end if;
+         end if;
+         
+      end if;
+   end process;
    
    tex_color_save <= tex_color_s2 when (step2 = '1') else tex_color_s1;
    tex_alpha_save <= tex_alpha_s2 when (step2 = '1') else tex_alpha_s1;
@@ -379,10 +405,17 @@ begin
       -- synthesis translate_on
       
       if (hasYUV = '1' and settings_otherModes.biLerp0 = '0' and settings_otherModes.cycleType(1) = '0') then
-         tex_color(0) <= unsigned(YUV_ADDY_R);
-         tex_color(1) <= unsigned(YUV_ADDY_G);
-         tex_color(2) <= unsigned(YUV_ADDY_B);
-         tex_color(3) <= '0' & tex_Y_1;
+         if (settings_otherModes.cycleType(0) = '1') then
+            tex_color(0) <= unsigned(YUV_ADDY_R_next);
+            tex_color(1) <= unsigned(YUV_ADDY_G_next);
+            tex_color(2) <= unsigned(YUV_ADDY_B_next);
+            tex_color(3) <= '0' & YUV_ADDY_A_next;
+         else
+            tex_color(0) <= unsigned(YUV_ADDY_R);
+            tex_color(1) <= unsigned(YUV_ADDY_G);
+            tex_color(2) <= unsigned(YUV_ADDY_B);
+            tex_color(3) <= '0' & tex_Y_1;
+         end if;
       elsif (settings_otherModes.enTlut = '1') then
          if (settings_otherModes.tlutType = '1') then
             tex_color(0) <= '0' & palette16(15 downto 8);
