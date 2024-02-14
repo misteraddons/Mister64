@@ -7,6 +7,7 @@ use work.pRDP.all;
 entity RDP_DitherCalc is
    port 
    (
+      settings_otherModes  : in  tsettings_otherModes;
       ditherColor          : in  unsigned(2 downto 0);
       color_in             : in  tcolor3_u8;
       color_out            : out tcolor3_u8
@@ -27,7 +28,7 @@ begin
    begin
       for i in 0 to 2 loop
       
-         if (ditherColor < color_in(i)(2 downto 0)) then 
+         if (settings_otherModes.rgbDitherSel /= "11" and ditherColor < color_in(i)(2 downto 0)) then 
             useDith(i) <= '1'; 
          else 
             useDith(i) <= '0'; 

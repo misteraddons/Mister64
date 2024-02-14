@@ -1561,6 +1561,7 @@ begin
    iRDP_DitherCalc : entity work.RDP_DitherCalc
    port map
    (
+      settings_otherModes  => settings_otherModes,
       ditherColor          => stage_ditherC(STAGE_OUTPUT),
       color_in             => writePixelColor,
       color_out            => writePixelColorOut
