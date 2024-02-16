@@ -125,7 +125,28 @@ begin
             case (settings_tile_1.Tile_format) is
                when FORMAT_YUV => error_texMode <= '1'; -- should not be allowed
                
-               when FORMAT_RGBA | FORMAT_CI => -- 4 bit RGBA behaves like CI
+               when FORMAT_RGBA =>
+                  tex_color_read(0) <= data4 & data4;
+                  tex_color_read(1) <= data4 & data4;
+                  tex_color_read(2) <= data4 & data4;
+                  tex_alpha_read    <= data4 & data4;
+                  -- synthesis translate_off
+                  if (settings_otherModes.enTlut = '1') then
+                     exportNext_TexFt_addr <= 20x"0" & '1' & unsigned(tex_palette_addr) & "000";
+                     exportNext_TexFt_db1  <= resize(addr_base_1, 32);
+                     exportNext_TexFt_db3  <= x"0000000" & data4;
+                  else
+                     exportNext_TexFt_addr <= 24x"0" & data4 & data4;
+                     exportNext_TexFt_data(23 downto 16) <= data4 & data4;
+                     exportNext_TexFt_data(15 downto  8) <= data4 & data4;
+                     exportNext_TexFt_data( 7 downto  0) <= data4 & data4;
+                     exportNext_TexFt_data(31 downto 24) <= data4 & data4;
+                     exportNext_TexFt_db1  <= resize(addr_base_1, 32);
+                     exportNext_TexFt_db3  <= x"000000" & data8;
+                  end if;
+                  -- synthesis translate_on
+                  
+               when FORMAT_CI =>
                   tex_color_read(0) <= settings_tile_1.Tile_palette & data4;
                   tex_color_read(1) <= settings_tile_1.Tile_palette & data4;
                   tex_color_read(2) <= settings_tile_1.Tile_palette & data4;
