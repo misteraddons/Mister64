@@ -1152,6 +1152,9 @@ begin
                ADD_leadingZeros <= 55 - i;
             end if;
          end loop;
+         if (add_result(56) = '1') then
+            ADD_leadingZeros <= 0;
+         end if;
       else
          ADD_leadingZeros <= 27;
          for i in 0 to 26 loop
@@ -1159,6 +1162,9 @@ begin
                ADD_leadingZeros <= 26 - i;
             end if;
          end loop;
+         if (add_result(27) = '1') then
+            ADD_leadingZeros <= 0;
+         end if;
       end if;
       
    end process;
