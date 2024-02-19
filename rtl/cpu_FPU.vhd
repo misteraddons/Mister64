@@ -784,34 +784,21 @@ begin
                   end case;
                end if;
                
-               if ((checkInputs_dn = '1' and dnA = '1') or (checkInputs2_dn = '1' and dnB = '1')) then
+               if (
+                     (checkInputs_dn   = '1' and dnA = '1') or 
+                     (checkInputs2_dn  = '1' and dnB = '1') or
+                     (checkInputs_nan  = '1' and nanA = '1' and not((bit64 = '1' and command_op1(51) = '1') or (bit64 = '0' and command_op1(22) = '1'))) or
+                     (checkInputs2_nan = '1' and nanB = '1' and not((bit64 = '1' and command_op2(51) = '1') or (bit64 = '0' and command_op2(22) = '1')))
+                  ) then
                   csr_cause_unimplemented <= '1';
                   exception_inputInvalid  <= '1';
                else
-                  if (checkInputs_nan = '1' and nanA = '1') then
-                     if ((bit64 = '1' and command_op1(51) = '1') or (bit64 = '0' and command_op1(22) = '1')) then
-                        csr_cause_invalidOperation <= '1';
-                        if (csr_ena_invalidOperation = '1') then
-                           exception_inputInvalid <= '1';
-                        else
-                           csr_flag_invalidOperation <= '1';
-                        end if;
+                  if ((checkInputs_nan = '1' and nanA = '1') or (checkInputs2_nan = '1' and nanB = '1')) then
+                     csr_cause_invalidOperation <= '1';
+                     if (csr_ena_invalidOperation = '1') then
+                        exception_inputInvalid <= '1';
                      else
-                        exception_inputInvalid  <= '1';
-                        csr_cause_unimplemented <= '1';
-                     end if;
-                  end if;
-                  if (checkInputs2_nan = '1' and nanB = '1' and nanA = '0') then
-                     if ((bit64 = '1' and command_op2(51) = '1') or (bit64 = '0' and command_op2(22) = '1')) then
-                        csr_cause_invalidOperation <= '1';
-                        if (csr_ena_invalidOperation = '1') then
-                           exception_inputInvalid <= '1';
-                        else
-                           csr_flag_invalidOperation <= '1';
-                        end if;
-                     else
-                        exception_inputInvalid  <= '1';
-                        csr_cause_unimplemented <= '1';
+                        csr_flag_invalidOperation <= '1';
                      end if;
                   end if;
                end if;
