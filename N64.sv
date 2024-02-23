@@ -315,6 +315,7 @@ parameter CONF_STR = {
    "P1O[30],Texture Filter,Original,Off;",
    "P1O[31],Dithering,Original,Off;",
    "P1O[34],LOD Textures,Original,Off;",
+   "P1O[104],VI Colorbits,Original(21),24;",
    "P1O[32],VI Bilinear,Original,Off;",
    "P1O[33],VI Gamma,Original,Off;",
    "P1O[88:87],VI Dedither,Original,Off,Force;",
@@ -719,6 +720,7 @@ n64top
    .VI_AAOFF(status[35]),
    .VI_DIVOTOFF(status[36]),
    .VI_NOISEOFF(status[37]),
+   .VI_7BITPERCOLOR(~status[104]),
    
    .CICTYPE(status[68:65]),
    .RAMSIZE8(~status[70]),

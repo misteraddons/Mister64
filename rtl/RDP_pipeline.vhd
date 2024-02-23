@@ -1567,6 +1567,7 @@ begin
    (
       settings_otherModes  => settings_otherModes,
       ditherColor          => stage_ditherC(STAGE_OUTPUT),
+      random9              => lfsr(8 downto 0),
       color_in             => writePixelColor,
       color_out            => writePixelColorOut
    );
