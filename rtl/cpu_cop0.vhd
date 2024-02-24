@@ -57,6 +57,10 @@ entity cpu_cop0 is
       writeValue              : in  unsigned(63 downto 0);
       readValue               : out unsigned(63 downto 0) := (others => '0');
       
+      executeSetLL            : in  std_logic;
+      executeLLfromTLB        : in  std_logic;
+      executeLLAddr           : in  unsigned(31 downto 0);
+      
       TagLo_Valid             : out std_logic;
       TagLo_Dirty             : out std_logic;
       TagLo_Addr              : out unsigned(19 downto 0);
@@ -628,6 +632,15 @@ begin
                cop0Written6 <= cop0Written6 - 1;
                if (cop0Written6 = 1) then
                   COP0_1_RANDOM   <= to_unsigned(31, 6);
+               end if;
+            end if;
+            
+            -- linked address
+            if (stall = 0 and executeSetLL = '1') then 
+               if (executeLLfromTLB = '1') then
+                  COP0_17_LOADLINKEDADDRESS <= 36x"0" & executeLLAddr(31 downto 4);
+               else
+                  COP0_17_LOADLINKEDADDRESS <= 39x"0" & executeLLAddr(28 downto 4);
                end if;
             end if;
             

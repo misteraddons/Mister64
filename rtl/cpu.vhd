@@ -459,6 +459,8 @@ architecture arch of cpu is
    signal executeCOP2WriteEnable       : std_logic := '0';
    signal executeCOP2ReadEnable        : std_logic := '0';
    signal executeCOP64                 : std_logic := '0';
+   signal executeSetLL                 : std_logic := '0';
+   signal executeLLfromTLB             : std_logic := '0';
    signal executeLoadType              : CPU_LOADTYPE;
    signal executeICacheEnable          : std_logic := '0';
    signal executeDCacheEnable          : std_logic := '0';
@@ -2222,8 +2224,7 @@ begin
    FPU_command_ena      <= decodeFPUCommandEnable  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
    FPU_TransferEna      <= decodeFPUTransferEnable when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
                      
-   EXECOP0WriteValue    <= 36x"0" & calcMemAddr(31 downto 4)                 when (decodeSetLL = '1') else
-                           unsigned(resize(signed(value2(31 downto 0)), 64)) when (decodeCOP64 = '0') else
+   EXECOP0WriteValue    <= unsigned(resize(signed(value2(31 downto 0)), 64)) when (decodeCOP64 = '0') else
                            value2;
 
    -- 64bit mode?
@@ -2232,7 +2233,7 @@ begin
                    '1' when (privilegeMode = "10" and (calcMemAddr(31 downto 29) < 4)) else
                    '0';
    
-   EXETLBDataAccess <= decodeMemReadEnable or decodeMemWriteEnable or decodeCacheEnable when (EXETLBMapped = '1' and exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
+   EXETLBDataAccess <= decodeMemReadEnable or decodeMemWriteEnable or decodeCacheEnable or decodeMemWriteLL when (EXETLBMapped = '1' and exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
 
    ---------------------- load/store ------------------
    
@@ -2357,6 +2358,7 @@ begin
             executeCOP0WriteEnable        <= '0';
             executeICacheEnable           <= '0';
             executeDCacheEnable           <= '0';
+            executeSetLL                  <= '0';
             llBit                         <= '0';
             hiloWait                      <= 0;
             
@@ -2433,8 +2435,8 @@ begin
             
             -- TLB unstall            
             if (TLB_dataUnStall = '1') then
-               executeMemAddress   <= TLB_dataAddrOutLookup;
-               executeNew          <= '1';
+               executeMemAddress     <= TLB_dataAddrOutLookup;
+               executeNew            <= '1';
                if (exception = '0') then
                   if (executeMemReadEnable = '1') then
                      executeStallFromMEM <= '1';
@@ -2461,6 +2463,7 @@ begin
                executeNew              <= '0';
                executeICacheEnable     <= '0';
                executeDCacheEnable     <= '0';
+               executeSetLL            <= '0';
                
                resultData              <= resultDataMuxed64;    
                resultTarget            <= decodeTarget;
@@ -2470,6 +2473,7 @@ begin
                executeMemWriteMask     <= EXEMemWriteMask;
                executeMemReadLastData  <= value2;           
 
+               executeLLfromTLB        <= EXETLBDataAccess;
                if (EXETLBDataAccess = '1') then
                   executeMemAddress <= TLB_dataAddrOutFound;
                else
@@ -2546,6 +2550,8 @@ begin
                      
                      executeCOP64                  <= decodeCOP64;
 
+                     executeSetLL                  <= decodeSetLL;
+
                      if (decodeERET = '1') then
                         llBit <= '0';
                      elsif (EXEExceptionMem = '0') then
@@ -2553,8 +2559,6 @@ begin
                            llBit <= '0';
                         elsif (decodeSetLL = '1') then
                            llBit <= '1';
-                           executeCOP0WriteEnable <= '1';
-                           executeCOP0Register    <= to_unsigned(17,5);
                         end if;
                      end if;
 
@@ -3268,6 +3272,10 @@ begin
       writeValue              => executeCOP0WriteValue,
       readValue               => COP0ReadValue,
       
+      executeSetLL            => executeSetLL,
+      executeLLfromTLB        => executeLLfromTLB,
+      executeLLAddr           => executeMemAddress,
+      
       TagLo_Valid             => TagLo_Valid,
       TagLo_Dirty             => TagLo_Dirty,
       TagLo_Addr              => TagLo_Addr, 
@@ -3291,7 +3299,7 @@ begin
       TLB_instrAddrOutLookup  => TLB_instrAddrOutLookup,
       
       TLB_dataReq             => EXETLBDataAccess,   
-      TLB_dataIsWrite         => decodeMemWriteEnable,   
+      TLB_dataIsWrite         => decodeMemWriteEnable or decodeMemWriteLL,   
       TLB_dataAddrIn          => calcMemAddr,
       TLB_dataUseCacheFound   => TLB_dataUseCacheFound,
       TLB_dataUseCacheLookup  => TLB_dataUseCacheLookup,
