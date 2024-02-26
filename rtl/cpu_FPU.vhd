@@ -36,7 +36,10 @@ entity cpu_FPU is
       FPUWriteTarget    : out unsigned(4 downto 0) := (others => '0');
       FPUWriteData      : out unsigned(63 downto 0) := (others => '0');
       FPUWriteEnable    : out std_logic := '0';
-      FPUWriteMask      : out std_logic_vector(1 downto 0) := (others => '0')
+      FPUWriteMask      : out std_logic_vector(1 downto 0) := (others => '0');
+      
+      SS_FPU_CF         : in  std_logic;
+      SS_CSR            : in  unsigned(24 downto 0)
    );
 end entity;
 
@@ -614,7 +617,8 @@ begin
       
          if (reset = '1') then
          
-            csr    <= (others => '0');
+            csr         <= SS_CSR; -- (others => '0');
+            csr_compare <= SS_FPU_CF;  -- '0';
            
          else 
          

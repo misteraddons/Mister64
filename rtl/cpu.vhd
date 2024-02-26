@@ -141,6 +141,7 @@ architecture arch of cpu is
    signal exception                    : std_logic;
    signal exceptionStage1              : std_logic;
    signal exceptionNew3                : std_logic := '0';
+   signal exceptionNewPC               : std_logic;
    signal exceptionFPU                 : std_logic;
    signal exception_COP                : unsigned(1 downto 0);
    
@@ -2219,7 +2220,9 @@ begin
                      '1' when (decodeExcType = EXCTYPE_TRAPIE0 and calcResult_equal               = '0') else
                      '1' when (decodeExcType = EXCTYPE_TRAPIE1 and calcResult_equal               = '1') else
                      '0';
-                     
+    
+   exceptionNewPC <= '1' when (decodeExcType = EXCTYPE_PC and value1(1 downto 0) > 0) else '0';
+    
    ---------------------- COP ------------------                  
    FPU_command_ena      <= decodeFPUCommandEnable  when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
    FPU_TransferEna      <= decodeFPUTransferEnable when (exception = '0' and stall = 0 and executeIgnoreNext = '0' and decodeNew = '1') else '0';
@@ -3248,6 +3251,8 @@ begin
 
       eret                    => execute_ERET,
       exception3              => exceptionNew3,
+      exceptionNewPC          => exceptionNewPC,
+      exceptionPCStore        => value1,
       exceptionFPU            => exceptionFPU,
       exceptionCode_1         => "0000", -- todo
       exceptionCode_3         => exceptionCode_3,
@@ -3373,7 +3378,10 @@ begin
       FPUWriteTarget    => FPUWriteTarget,
       FPUWriteData      => FPUWriteData,  
       FPUWriteEnable    => FPUWriteEnable,
-      FPUWriteMask      => FPUWriteMask
+      FPUWriteMask      => FPUWriteMask,
+      
+      SS_FPU_CF         => ss_in(24)(32),
+      SS_CSR            => unsigned(ss_in(24)(24 downto 0))
    );
    
 --##############################################################
