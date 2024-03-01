@@ -35,6 +35,7 @@ entity n64top is
       VI_DIVOTOFF             : in  std_logic;
       VI_NOISEOFF             : in  std_logic;
       VI_7BITPERCOLOR         : in  std_logic;
+      VI_DIRECTFBMODE         : in  std_logic;
       
       CICTYPE                 : in  std_logic_vector(3 downto 0);
       RAMSIZE8                : in  std_logic;
@@ -181,7 +182,11 @@ entity n64top is
       video_interlace         : out std_logic;
       video_r                 : out std_logic_vector(7 downto 0);
       video_g                 : out std_logic_vector(7 downto 0);
-      video_b                 : out std_logic_vector(7 downto 0)
+      video_b                 : out std_logic_vector(7 downto 0);
+      
+      video_FB_base           : out unsigned(31 downto 0);
+      video_FB_sizeX          : out unsigned(9 downto 0);
+      video_FB_sizeY          : out unsigned(9 downto 0)
    );
 end entity;
 
@@ -265,6 +270,9 @@ architecture arch of n64top is
    signal rdpfifoZ_Wr            : std_logic;  
    signal rdpfifoZ_nearfull      : std_logic;    
    signal rdpfifoZ_empty         : std_logic;    
+   
+   signal VIFBfifo_Din           : std_logic_vector(87 downto 0);
+   signal VIFBfifo_Wr            : std_logic;         
 
    -- SDRAM Mux
    signal sdrammux_idle          : std_logic;
@@ -806,6 +814,7 @@ begin
       VI_AAOFF             => VI_AAOFF,
       VI_DIVOTOFF          => VI_DIVOTOFF,
       VI_7BITPERCOLOR      => VI_7BITPERCOLOR,
+      VI_DIRECTFBMODE      => VI_DIRECTFBMODE,
      
       errorEna             => errorEna, 
       errorCode            => errorCode,
@@ -818,7 +827,10 @@ begin
       rdram_granted        => rdram_granted(DDR3MUX_VI),      
       rdram_done           => rdram_done(DDR3MUX_VI),     
       ddr3_DOUT            => ddr3_DOUT,       
-      ddr3_DOUT_READY      => ddr3_DOUT_READY,       
+      ddr3_DOUT_READY      => ddr3_DOUT_READY,   
+
+      VIFBfifo_Din         => VIFBfifo_Din,
+      VIFBfifo_Wr          => VIFBfifo_Wr,       
       
       sdram_request        => sdramMux_request(SDRAMMUX_VI),   
       sdram_rnw            => sdramMux_rnw(SDRAMMUX_VI),       
@@ -837,7 +849,11 @@ begin
       video_interlace      => video_interlace,     
       video_r              => video_r,      
       video_g              => video_g,      
-      video_b              => video_b,  
+      video_b              => video_b,
+      
+      video_FB_base        => video_FB_base,
+      video_FB_sizeX       => video_FB_sizeX,
+      video_FB_sizeY       => video_FB_sizeY,
 
       bus_addr             => bus_VI_addr,     
       bus_dataWrite        => bus_VI_dataWrite,
@@ -1247,7 +1263,10 @@ begin
       rdpfifoZ_Din     => rdpfifoZ_Din,     
       rdpfifoZ_Wr      => rdpfifoZ_Wr,      
       rdpfifoZ_nearfull=> rdpfifoZ_nearfull,
-      rdpfifoZ_empty   => rdpfifoZ_empty
+      rdpfifoZ_empty   => rdpfifoZ_empty,
+      
+      VIFBfifo_Din     => VIFBfifo_Din,
+      VIFBfifo_Wr      => VIFBfifo_Wr
    );
    
    sdramMux_writeMask(SDRAMMUX_VI) <= (others => '0');

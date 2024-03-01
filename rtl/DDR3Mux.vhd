@@ -31,6 +31,12 @@ end package;
 --------------- DDR3Mux module    -------------------------------
 -----------------------------------------------------------------
 
+--   0..8   Mbyte = RDRAM
+--   8..8   Mbyte = RMRAM read behind area 
+--  16..32  Mbyte = VI FB mode area
+--  32..96  Mbyte = N64 ROM fastload area 
+-- 192..256 Mbyte = Savestates
+
 library IEEE;
 use IEEE.std_logic_1164.all;  
 use IEEE.numeric_std.all; 
@@ -95,7 +101,10 @@ entity DDR3Mux is
       rdpfifoZ_Din     : in  std_logic_vector(91 downto 0); -- 64bit data + 20 bit address + 8 byte enables
       rdpfifoZ_Wr      : in  std_logic;  
       rdpfifoZ_nearfull: out std_logic;  
-      rdpfifoZ_empty   : out std_logic 
+      rdpfifoZ_empty   : out std_logic;
+
+      VIFBfifo_Din     : in  std_logic_vector(87 downto 0); -- 64bit data + 24 bit address
+      VIFBfifo_Wr      : in  std_logic     
    );
 end entity;
 
@@ -135,7 +144,12 @@ architecture arch of DDR3Mux is
 
    -- rdp fifo Z
    signal rdpfifoZ_Dout    : std_logic_vector(91 downto 0);
-   signal rdpfifoZ_Rd      : std_logic := '0';    
+   signal rdpfifoZ_Rd      : std_logic := '0';     
+   
+   -- VI FB fifo
+   signal VIFBfifo_Dout    : std_logic_vector(87 downto 0);
+   signal VIFBfifo_Rd      : std_logic := '0';    
+   signal VIFBfifo_empty   : std_logic := '0';    
 
    -- slow
    signal slow       : unsigned(3 downto 0) := (others => '0');
@@ -189,6 +203,7 @@ begin
          rspfifo_Rd  <= '0';
          rdpfifo_Rd  <= '0';
          rdpfifoZ_Rd <= '0';
+         VIFBfifo_Rd <= '0';
          
          ddr3_DOUT_READY_1 <= ddr3_DOUT_READY;
          
@@ -321,6 +336,15 @@ begin
                         ddr3_WE        <= '0';
                         error_outRDPZ  <= '1';
                      end if;  
+                     
+                  elsif (VIFBfifo_empty = '0' and VIFBfifo_Rd = '0') then
+                  
+                     VIFBfifo_Rd <= '1';
+                     ddr3_WE     <= '1';
+                     ddr3_DIN    <= VIFBfifo_Dout(63 downto 0);      
+                     ddr3_BE     <= x"FF";       
+                     ddr3_ADDR(24 downto 0) <= "0" & VIFBfifo_Dout(87 downto 64);
+                     ddr3_BURSTCNT <= x"01";
                   
                   end if;   
                   
@@ -458,6 +482,26 @@ begin
       Dout     => rdpfifoZ_Dout,    
       Rd       => rdpfifoZ_Rd,      
       Empty    => rdpfifoZ_empty   
+   );   
+   
+   iVIFBFifo: entity mem.SyncFifoFallThrough
+   generic map
+   (
+      SIZE             => 1024,
+      DATAWIDTH        => 64 + 24, -- 64bit data + 24 bit address
+      NEARFULLDISTANCE => 1000
+   )
+   port map
+   ( 
+      clk      => clk2x,
+      reset    => '0',  
+      Din      => VIFBfifo_Din,     
+      Wr       => (VIFBfifo_Wr and clk2xIndex),
+      Full     => open,    
+      NearFull => open,
+      Dout     => VIFBfifo_Dout,    
+      Rd       => VIFBfifo_Rd,      
+      Empty    => VIFBfifo_empty   
    );
 
 end architecture;
