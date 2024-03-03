@@ -40,6 +40,7 @@ entity n64top is
       CICTYPE                 : in  std_logic_vector(3 downto 0);
       RAMSIZE8                : in  std_logic;
       FASTRAM                 : in  std_logic;
+      FASTROM                 : in  std_logic;
       INSTRCACHEON            : in  std_logic;
       DATACACHEON             : in  std_logic;
       DATACACHESLOW           : in  std_logic_vector(3 downto 0); 
@@ -207,7 +208,7 @@ architecture arch of n64top is
    
    -- error codes
    signal errorEna               : std_logic;
-   signal errorCode              : unsigned(27 downto 0) := (others => '0');
+   signal errorCode              : unsigned(31 downto 0) := (others => '0');
    
    signal errorMEMMUX            : std_logic;
    signal errorCPU_instr         : std_logic;
@@ -237,6 +238,7 @@ architecture arch of n64top is
    signal error_RDPMEMMUX        : std_logic;
    signal errorCPU_fifo          : std_logic;
    signal errorCPU_TLB           : std_logic;
+   signal errorDDR3_outPI        : std_logic;
   
    -- irq
    signal irqRequest             : std_logic;
@@ -270,6 +272,11 @@ architecture arch of n64top is
    signal rdpfifoZ_Wr            : std_logic;  
    signal rdpfifoZ_nearfull      : std_logic;    
    signal rdpfifoZ_empty         : std_logic;    
+   
+   signal PIfifo_Din             : std_logic_vector(92 downto 0);
+   signal PIfifo_Wr              : std_logic;  
+   signal PIfifo_nearfull        : std_logic;  
+   signal PIfifo_empty           : std_logic;  
    
    signal VIFBfifo_Din           : std_logic_vector(87 downto 0);
    signal VIFBfifo_Wr            : std_logic;         
@@ -561,6 +568,9 @@ begin
    process (reset_intern_1x, error_RDPMEMMUX      ) begin if (error_RDPMEMMUX       = '1') then errorCode(25) <= '1'; elsif (reset_intern_1x = '1') then errorCode(25) <= '0'; end if; end process;
    process (reset_intern_1x, errorCPU_fifo        ) begin if (errorCPU_fifo         = '1') then errorCode(26) <= '1'; elsif (reset_intern_1x = '1') then errorCode(26) <= '0'; end if; end process;
    process (reset_intern_1x, errorCPU_TLB         ) begin if (errorCPU_TLB          = '1') then errorCode(27) <= '1'; elsif (reset_intern_1x = '1') then errorCode(27) <= '0'; end if; end process;
+   process (reset_intern_1x, errorDDR3_outPI      ) begin if (errorDDR3_outPI       = '1') then errorCode(28) <= '1'; elsif (reset_intern_1x = '1') then errorCode(28) <= '0'; end if; end process;
+   
+   errorCode(31 downto 29) <= "000";
    
    process (clk1x)
    begin
@@ -969,6 +979,7 @@ begin
       ce                   => ce_1x,           
       reset                => reset_intern_1x, 
       
+      FASTROM              => FASTROM,
       SAVETYPE             => SAVETYPE,
       fastDecay            => is_simu,
       cartAvailable        => cartAvailable,
@@ -993,11 +1004,14 @@ begin
       rdram_rnw            => rdram_rnw(DDR3MUX_PI),       
       rdram_address        => rdram_address(DDR3MUX_PI),   
       rdram_burstcount     => rdram_burstcount(DDR3MUX_PI),
-      rdram_writeMask      => rdram_writeMask(DDR3MUX_PI), 
-      rdram_dataWrite      => rdram_dataWrite(DDR3MUX_PI), 
       rdram_done           => rdram_done(DDR3MUX_PI),      
       rdram_dataRead       => rdram_dataRead,      
-                            
+      
+      PIfifo_Din           => PIfifo_Din,    
+      PIfifo_Wr            => PIfifo_Wr,   
+      PIfifo_nearfull      => PIfifo_nearfull,  
+      PIfifo_empty         => PIfifo_empty,  
+      
       bus_reg_addr         => bus_PIreg_addr,     
       bus_reg_dataWrite    => bus_PIreg_dataWrite,
       bus_reg_read         => bus_PIreg_read,     
@@ -1226,6 +1240,7 @@ begin
       error_outRSP     => errorDDR3_outRSP,
       error_outRDP     => errorDDR3_outRDP,
       error_outRDPZ    => errorDDR3_outRDPZ,
+      error_outPI      => errorDDR3_outPI,
                                           
       ddr3_BUSY        => ddr3_BUSY,       
       ddr3_DOUT        => ddr3_DOUT,       
@@ -1264,6 +1279,11 @@ begin
       rdpfifoZ_Wr      => rdpfifoZ_Wr,      
       rdpfifoZ_nearfull=> rdpfifoZ_nearfull,
       rdpfifoZ_empty   => rdpfifoZ_empty,
+      
+      PIfifo_Din       => PIfifo_Din,    
+      PIfifo_Wr        => PIfifo_Wr,   
+      PIfifo_nearfull  => PIfifo_nearfull,   
+      PIfifo_empty     => PIfifo_empty,
       
       VIFBfifo_Din     => VIFBfifo_Din,
       VIFBfifo_Wr      => VIFBfifo_Wr

@@ -352,6 +352,7 @@ parameter CONF_STR = {
    
    "P3,Debug settings;",
    "P3O[83],Fast RAM access,Off,On;",
+   "P3O[106],Fast ROM access,Off,On;",
    "P3O[93],Instr Cache,On,Off;",
    "P3O[43],Data Cache,On,Off;",
    "P3O[100],Data Cache from TLB,On,Off;",
@@ -741,6 +742,7 @@ n64top
    .CICTYPE(status[68:65]),
    .RAMSIZE8(~status[70]),
    .FASTRAM(status[83]),
+   .FASTROM(status[106]),
    .INSTRCACHEON(~status[93]),
    .DATACACHEON(~status[43]),
    .DATACACHESLOW(status[27:24]),

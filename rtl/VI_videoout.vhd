@@ -35,7 +35,7 @@ entity VI_videoout is
       VI_DIRECTFBMODE                  : in  std_logic;
                   
       errorEna                         : in  std_logic;
-      errorCode                        : in  unsigned(27 downto 0);
+      errorCode                        : in  unsigned(31 downto 0);
                   
       fpscountOn                       : in  std_logic;
       fpscountBCD                      : in  unsigned(7 downto 0);  
@@ -214,7 +214,7 @@ architecture arch of VI_videoout is
    signal overlay_fps_data    : std_logic_vector(23 downto 0);
    signal overlay_fps_ena     : std_logic;
    
-   signal errortext           : unsigned(55 downto 0);
+   signal errortext           : unsigned(63 downto 0);
    signal overlay_error_data  : std_logic_vector(23 downto 0);
    signal overlay_error_ena   : std_logic;   
    
@@ -621,7 +621,8 @@ begin
    errortext(39 downto 32) <= resize(errorCode(19 downto 16), 8) + 16#30# when (errorCode(19 downto 16) < 10) else resize(errorCode(19 downto 16), 8) + 16#37#;
    errortext(47 downto 40) <= resize(errorCode(23 downto 20), 8) + 16#30# when (errorCode(23 downto 20) < 10) else resize(errorCode(23 downto 20), 8) + 16#37#;
    errortext(55 downto 48) <= resize(errorCode(27 downto 24), 8) + 16#30# when (errorCode(27 downto 24) < 10) else resize(errorCode(27 downto 24), 8) + 16#37#;
-   ioverlayError : entity work.VI_overlay generic map (8, 4, 44, x"0000FF")
+   errortext(63 downto 56) <= resize(errorCode(31 downto 28), 8) + 16#30# when (errorCode(31 downto 28) < 10) else resize(errorCode(31 downto 28), 8) + 16#37#;
+   ioverlayError : entity work.VI_overlay generic map (9, 4, 44, x"0000FF")
    port map
    (
       clk                    => clkvid,

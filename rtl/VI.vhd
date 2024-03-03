@@ -38,7 +38,7 @@ entity VI is
       VI_DIRECTFBMODE  : in  std_logic;
       
       errorEna         : in  std_logic;
-      errorCode        : in  unsigned(27 downto 0);
+      errorCode        : in  unsigned(31 downto 0);
       fpscountOn       : in  std_logic;
       
       rdram_request    : out std_logic := '0';

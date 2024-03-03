@@ -289,7 +289,7 @@ begin
             out_color(16) <= lfsr(2);
          end if;
          
-         if (gamma_guard = '1') then
+         if (gamma_guard = '1' or VI_X_SCALE_FACTOR = 0) then
             out_color <= (others => '0');
          end if;
        
